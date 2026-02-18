@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
@@ -8,6 +9,17 @@ __pycache__/
 
 # Distribution / packaging
 .Python
+=======
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+>>>>>>> 3a66b03 (Add gitignore to protect secrets)
 build/
 develop-eggs/
 dist/
@@ -20,6 +32,7 @@ parts/
 sdist/
 var/
 wheels/
+<<<<<<< HEAD
 share/python-wheels/
 *.egg-info/
 .installed.cfg
@@ -205,3 +218,29 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+=======
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Streamlit
+.streamlit/secrets.toml
+.streamlit/logger.toml
+.streamlit/*.toml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data files (optional - uncomment if you don't want to track data)
+# *.csv
+# *.xlsx
+# *.xls
+>>>>>>> 3a66b03 (Add gitignore to protect secrets)
