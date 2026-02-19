@@ -1,7 +1,6 @@
 """
 Spread Capital Arrears Analysis System
 Main Streamlit Application
-Cloud-Ready with Google Drive Integration
 """
 
 import streamlit as st
@@ -17,7 +16,6 @@ import io
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from src.data_loader import load_all_data
-from src.google_drive_handler import get_drive_handler
 from src.calculations import (
     calculate_par_percentage,
     get_top_risk_branch,
@@ -125,108 +123,27 @@ st.markdown("""
 if 'data_loaded' not in st.session_state:
     st.session_state.data_loaded = False
     st.session_state.df = pd.DataFrame()
-# Load data from data folder (with automatic column standardization)
+
+# Load data
 @st.cache_data
-def load_and_clean_data():
-    """
-    Working logic: Automatically finds and merges all Excel/CSV reports 
-    from the 'data' folder while standardizing column names.
-    """
-    # 1. Flexible Folder Path (handles 'data' or 'Data' on GitHub/Linux)
-    root_dir = os.path.dirname(os.path.abspath(__file__))
-    data_folder = next((os.path.join(root_dir, f) for f in ["data", "Data"] 
-                        if os.path.exists(os.path.join(root_dir, f))), None)
-    
-    if not data_folder:
-        st.error("❌ Data folder not found in the repository.")
-        return pd.DataFrame()
+def load_data():
+    """Load and cache data."""
+    return load_all_data()
 
-    # 2. Find files matching your pattern
-    all_files = os.listdir(data_folder)
-    target_files = [f for f in all_files if f.lower().endswith(('.xlsx', '.csv'))]
-    
-    if not target_files:
-        st.error(f"❌ No Excel or CSV files found in {data_folder}")
-        return pd.DataFrame()
-    
-    all_dfs = []
-    for filename in target_files:
-        path = os.path.join(data_folder, filename)
-        try:
-            # Read based on file type
-            df = pd.read_excel(path, engine='openpyxl') if filename.endswith('.xlsx') else pd.read_csv(path)
-            
-            # --- CRITICAL FIX: COLUMN STANDARDIZATION ---
-            # Remove hidden spaces from headers
-            df.columns = df.columns.str.strip()
-            
-            # Case-insensitive mapping for columns that cause KeyErrors
-            mapping = {
-                'branch': 'Branch',
-                'arrears': 'Arrears',
-                'amount in arrears': 'Arrears',
-                'days': 'Days',
-                'days in arrears': 'Days',
-                'loan_officer': 'Loan_Officer',
-                'loan officer': 'Loan_Officer',
-                'product': 'Product',
-                'principle': 'Principle',
-                'principal': 'Principle',
-                'totalbalance': 'TotalBalance',
-                'total balance': 'TotalBalance',
-                'accountid': 'AccountID',
-                'account id': 'AccountID',
-                'membername': 'MemberName',
-                'member name': 'MemberName',
-                'report_date': 'Report_Date',
-                'report date': 'Report_Date',
-            }
-            
-            # Rename columns if they match our aliases (lowercase comparison)
-            for col in df.columns:
-                if col.lower() in mapping:
-                    df = df.rename(columns={col: mapping[col.lower()]})
-            
-            all_dfs.append(df)
-            st.sidebar.success(f"✅ Loaded: {filename}")
-        except Exception as e:
-            st.sidebar.error(f"❌ Error in {filename}: {e}")
-
-    # 3. Combine and return
-    if all_dfs:
-        combined = pd.concat(all_dfs, ignore_index=True)
-        st.sidebar.success(f"✅ Total: {len(combined)} records from {len(all_dfs)} file(s)")
-        return combined
-    return pd.DataFrame()
-
-# Helper function to find columns case-insensitively
-def get_column_case_insensitive(df: pd.DataFrame, column_name: str):
-    """
-    Find a column in the dataframe case-insensitively.
-    Returns the actual column name if found, None otherwise.
-    """
-    for col in df.columns:
-        if col.lower() == column_name.lower():
-            return col
-    return None
-
-
+# Main app
 def main():
     st.title("📊 Spread Capital - Arrears Analysis System")
     st.markdown("---")
     
-    # Load data with automatic column standardization and cleaning
-    with st.spinner("Loading and cleaning data..."):
-        df = load_and_clean_data()
+    # Load data
+    with st.spinner("Loading data..."):
+        df = load_data()
         st.session_state.df = df
         st.session_state.data_loaded = True
     
     if df.empty:
-        st.error("❌ No data loaded. Please check the local data folder.")
+        st.error("No data loaded. Please check the data folder path.")
         return
-    
-    # Log available columns for debugging
-    st.sidebar.info(f"📋 **Loaded columns:** {', '.join(df.columns.tolist())}")
     
     # Sidebar filters
     st.sidebar.title("🔍 Filters")
@@ -252,40 +169,31 @@ def main():
         df_filtered = df.copy()
     
     # Branch filter with explicit "All" option
-    if 'Branch' in df_filtered.columns:
-        branches = sorted(df_filtered['Branch'].dropna().unique())
-        branch_options = ["All"] + [str(b) for b in branches]
-        selected_branches = st.sidebar.multiselect("Branch", branch_options, default=["All"])
-        if selected_branches and "All" not in selected_branches:
-            df_filtered = df_filtered[df_filtered['Branch'].isin(selected_branches)]
-    else:
-        selected_branches = ["All"]
+    branches = sorted(df_filtered['Branch'].dropna().unique())
+    branch_options = ["All"] + branches
+    selected_branches = st.sidebar.multiselect("Branch", branch_options, default=["All"])
+    if selected_branches and "All" not in selected_branches:
+        df_filtered = df_filtered[df_filtered['Branch'].isin(selected_branches)]
     
     # Loan Officer filter with explicit "All" option
-    if 'Loan_Officer' in df_filtered.columns:
-        officers = sorted(df_filtered['Loan_Officer'].dropna().unique())
-        officer_options = ["All"] + [str(o) for o in officers]
-        selected_officers = st.sidebar.multiselect("Loan Officer", officer_options, default=["All"])
-        if selected_officers and "All" not in selected_officers:
-            df_filtered = df_filtered[df_filtered['Loan_Officer'].isin(selected_officers)]
-    else:
-        selected_officers = ["All"]
+    officers = sorted(df_filtered['Loan_Officer'].dropna().unique())
+    officer_options = ["All"] + officers
+    selected_officers = st.sidebar.multiselect("Loan Officer", officer_options, default=["All"])
+    if selected_officers and "All" not in selected_officers:
+        df_filtered = df_filtered[df_filtered['Loan_Officer'].isin(selected_officers)]
     
     # Product filter with explicit "All" option + option to hide Unspecified
-    if 'Product' in df_filtered.columns:
-        products = sorted(df_filtered['Product'].dropna().unique())
-        hide_unspecified = False
-        if "Unspecified" in products:
-            hide_unspecified = st.sidebar.checkbox("Hide Unspecified Products", value=False)
-        display_products = [p for p in products if (not hide_unspecified or p != "Unspecified")]
-        product_options = ["All"] + [str(p) for p in display_products]
-        selected_products = st.sidebar.multiselect("Product", product_options, default=["All"])
-        if selected_products and "All" not in selected_products:
-            df_filtered = df_filtered[df_filtered['Product'].isin(selected_products)]
-        if hide_unspecified:
-            df_filtered = df_filtered[df_filtered['Product'] != "Unspecified"]
-    else:
-        selected_products = ["All"]
+    products = sorted(df_filtered['Product'].dropna().unique())
+    hide_unspecified = False
+    if "Unspecified" in products:
+        hide_unspecified = st.sidebar.checkbox("Hide Unspecified Products", value=False)
+    display_products = [p for p in products if (not hide_unspecified or p != "Unspecified")]
+    product_options = ["All"] + display_products
+    selected_products = st.sidebar.multiselect("Product", product_options, default=["All"])
+    if selected_products and "All" not in selected_products:
+        df_filtered = df_filtered[df_filtered['Product'].isin(selected_products)]
+    if hide_unspecified:
+        df_filtered = df_filtered[df_filtered['Product'] != "Unspecified"]
     
     # Aging filter with explicit "All" option
     st.sidebar.subheader("Aging Buckets")
@@ -312,23 +220,10 @@ def main():
     
     col1, col2, col3, col4, col5 = st.columns(5)
     
-    # Use standardized column names (load_and_clean_data converts all to these names)
-    total_arrears = df_filtered['Arrears'].sum() if 'Arrears' in df_filtered.columns else 0
-    
-    if 'Principle' in df_filtered.columns:
-        total_portfolio = df_filtered['Principle'].sum()
-    elif 'TotalBalance' in df_filtered.columns:
-        total_portfolio = df_filtered['TotalBalance'].sum()
-    else:
-        total_portfolio = 0
-    
-    if 'Days' in df_filtered.columns:
-        accounts_in_arrears = len(df_filtered[df_filtered['Days'].notna() & (df_filtered['Days'] > 0)])
-        avg_days = df_filtered[df_filtered['Days'].notna() & (df_filtered['Days'] > 0)]['Days'].mean() or 0
-    else:
-        accounts_in_arrears = 0
-        avg_days = 0
-    
+    total_arrears = df_filtered['Arrears'].sum()
+    total_portfolio = df_filtered['Principle'].sum() if 'Principle' in df_filtered.columns else df_filtered['TotalBalance'].sum()
+    accounts_in_arrears = len(df_filtered[df_filtered['Days'].notna() & (df_filtered['Days'] > 0)])
+    avg_days = df_filtered[df_filtered['Days'].notna() & (df_filtered['Days'] > 0)]['Days'].mean() or 0
     par_percentage = calculate_par_percentage(df_filtered)
     
     # 1. Total Arrears
@@ -387,55 +282,43 @@ def main():
     
     with col_chart1:
         # Arrears by Branch
-        if 'Branch' in df_filtered.columns and 'Arrears' in df_filtered.columns:
-            try:
-                branch_totals = df_filtered.groupby('Branch')['Arrears'].sum().sort_values(ascending=False)
-                if not branch_totals.empty:
-                    fig_branch = go.Figure(data=[
-                        go.Bar(
-                            x=branch_totals.index,
-                            y=branch_totals.values,
-                            marker_color=COLORS['accent_cyan'],
-                            text=[f"{CURRENCY_SYMBOL} {val:,.0f}" for val in branch_totals.values],
-                            textposition='outside',
-                        )
-                    ])
-                    grand_total = branch_totals.sum()
-                    fig_branch.update_layout(
-                        title=f"Arrears by Branch<br><sub>Grand Total Arrears: {CURRENCY_SYMBOL} {grand_total:,.0f}</sub>",
-                        xaxis_title="Branch",
-                        yaxis_title="Arrears Amount",
-                        height=400,
-                    )
-                    st.plotly_chart(fig_branch, use_container_width=True)
-            except Exception as e:
-                st.warning(f"⚠️ Could not create branch chart: {str(e)}")
-        else:
-            st.info("ℹ️ Branch or Arrears column not found. Cannot create branch chart.")
+        branch_totals = df_filtered.groupby('Branch')['Arrears'].sum().sort_values(ascending=False)
+        if not branch_totals.empty:
+            fig_branch = go.Figure(data=[
+                go.Bar(
+                    x=branch_totals.index,
+                    y=branch_totals.values,
+                    marker_color=COLORS['accent_cyan'],
+                    text=[f"{CURRENCY_SYMBOL} {val:,.0f}" for val in branch_totals.values],
+                    textposition='outside',
+                )
+            ])
+            grand_total = branch_totals.sum()
+            fig_branch.update_layout(
+                title=f"Arrears by Branch<br><sub>Grand Total Arrears: {CURRENCY_SYMBOL} {grand_total:,.0f}</sub>",
+                xaxis_title="Branch",
+                yaxis_title="Arrears Amount",
+                height=400,
+            )
+            st.plotly_chart(fig_branch, use_container_width=True)
     
     with col_chart2:
-        # Arrears by Product - Pie chart
-        if 'Product' in df_filtered.columns and 'Arrears' in df_filtered.columns:
-            try:
-                product_totals = df_filtered.groupby('Product')['Arrears'].sum().reset_index()
-                if not product_totals.empty:
-                    # Highlight JENGA and DUMISHA explicitly, others remain separate
-                    fig_product = px.pie(
-                        product_totals,
-                        values='Arrears',
-                        names='Product',
-                        title="Arrears by Product (JENGA vs DUMISHA vs Others)",
-                    )
-                    fig_product.update_traces(
-                        textposition="inside",
-                        textinfo="percent+label+value",
-                        hovertemplate="%{label}<br>Arrears: " + CURRENCY_SYMBOL + " %{value:,.0f}<extra></extra>",
-                    )
-                    st.plotly_chart(fig_product, use_container_width=True)
-            except Exception as e:
-                st.warning(f"⚠️ Could not create product chart: {str(e)}")
-        else:
-            st.info("ℹ️ Product or Arrears column not found. Cannot create product chart.")
+        # Arrears by Product - Pie chart (JENGA vs DUMISHA vs others)
+        product_totals = df_filtered.groupby('Product')['Arrears'].sum().reset_index()
+        if not product_totals.empty:
+            # Highlight JENGA and DUMISHA explicitly, others remain separate
+            fig_product = px.pie(
+                product_totals,
+                values="Arrears",
+                names="Product",
+                title="Arrears by Product (JENGA vs DUMISHA vs Others)",
+            )
+            fig_product.update_traces(
+                textposition="inside",
+                textinfo="percent+label+value",
+                hovertemplate="%{label}<br>Arrears: " + CURRENCY_SYMBOL + " %{value:,.0f}<extra></extra>",
+            )
+            st.plotly_chart(fig_product, use_container_width=True)
 
     
     
@@ -771,17 +654,6 @@ def main():
             st.info("No historical data available for the selected filters to plot daily movement.")
     else:
         st.info("No `Report_Date` column in dataset; cannot plot daily movement.")
-    
-    # ============================================================================
-    # Data Source Management Section (at bottom of page)
-    # ============================================================================
-    st.markdown("---")
-    st.subheader("📁 Data Source")
-    
-    st.info(
-        "**Data is automatically loaded from** `data/data.csv` in the project root directory. "
-        "This ensures compatibility with GitHub and Streamlit Cloud deployments."
-    )
     
 
 if __name__ == "__main__":
