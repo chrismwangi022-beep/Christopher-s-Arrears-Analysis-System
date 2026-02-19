@@ -152,9 +152,13 @@ def load_and_process_file(file_path: str) -> pd.DataFrame:
     try:
         # Load file
         if file_path.lower().endswith('.csv'):
+            print(f"  DEBUG: Reading CSV: {filename}")
             df = pd.read_csv(file_path, header=None, encoding='latin1')
         else:
+            print(f"  DEBUG: Reading XLSX: {filename}")
             df = pd.read_excel(file_path, header=None)
+        
+        print(f"  DEBUG: Loaded {len(df)} rows, {len(df.columns)} columns")
         
         # Fill NaN with empty strings for easier string operations
         df = df.fillna('')
@@ -171,6 +175,8 @@ def load_and_process_file(file_path: str) -> pd.DataFrame:
         account_id_col = detect_column_by_pattern(df, COLUMN_PATTERNS["account_id"], DEFAULT_COLUMNS["account_id"])
         member_name_col = detect_column_by_pattern(df, COLUMN_PATTERNS.get("member_name", []), DEFAULT_COLUMNS.get("member_name"))
         
+        print(f"  DEBUG: Detected columns - Arrears:{arrears_col}, Principle:{principle_col}, Days:{days_col}, Product:{product_col}")
+        
         # Extract data rows (skip header rows)
         # Find first numeric row in arrears column
         data_rows = []
@@ -186,8 +192,7 @@ def load_and_process_file(file_path: str) -> pd.DataFrame:
                 except (ValueError, AttributeError):
                     continue
         
-        if not data_rows:
-            return pd.DataFrame()
+        print(f"  DEBUG: Found {len(data_rows)} data rows with arrears values")
         
         # Build result dataframe
         result_data = []
@@ -289,6 +294,10 @@ def load_and_process_file(file_path: str) -> pd.DataFrame:
         
         result_df = pd.DataFrame(result_data)
         
+        if result_df.empty:
+            print(f"  WARNING: No records extracted from {filename}")
+            return pd.DataFrame()
+        
         # Fill missing Principle/TotalBalance with fallbacks
         if 'Principle' in result_df.columns:
             result_df['Principle'] = pd.to_numeric(result_df['Principle'], errors='coerce').fillna(result_df['Arrears'])
@@ -307,17 +316,25 @@ def load_and_process_file(file_path: str) -> pd.DataFrame:
         result_df['Principle'] = pd.to_numeric(result_df['Principle'], errors='coerce').fillna(0.0)
         result_df['TotalBalance'] = pd.to_numeric(result_df['TotalBalance'], errors='coerce').fillna(0.0)
         
+        print(f"  SUCCESS: Extracted {len(result_df)} records from {filename}")
         return result_df
         
     except Exception as e:
-        print(f"Error loading {filename}: {e}")
+        print(f"ERROR loading {filename}: {e}")
+        import traceback
+        traceback.print_exc()
         return pd.DataFrame()
 
 
 def load_all_data() -> pd.DataFrame:
-    """Load all CSV and Excel files from the Documents folder."""
+    """Load all CSV and Excel files from the DATA_FOLDER."""
+    print(f"DEBUG: DATA_FOLDER = {DATA_FOLDER}")
+    print(f"DEBUG: DATA_FOLDER exists: {os.path.exists(DATA_FOLDER)}")
+    
     if not os.path.exists(DATA_FOLDER):
-        print(f"Data folder not found: {DATA_FOLDER}")
+        print(f"ERROR: Data folder not found: {DATA_FOLDER}")
+        print(f"DEBUG: Current working directory: {os.getcwd()}")
+        print(f"DEBUG: Workspace root directory: {os.path.dirname(DATA_FOLDER)}")
         return pd.DataFrame()
     
     all_dataframes = []
@@ -325,20 +342,28 @@ def load_all_data() -> pd.DataFrame:
              if f.lower().endswith(('.csv', '.xlsx', '.xls')) 
              and "Movement Report" not in f]
     
+    print(f"DEBUG: Found {len(files)} data files in {DATA_FOLDER}")
+    print(f"DEBUG: Files found: {files}")
+    
     if not files:
-        print(f"No data files found in {DATA_FOLDER}")
+        print(f"ERROR: No data files found in {DATA_FOLDER}")
         return pd.DataFrame()
     
-    print(f"Found {len(files)} files to process...")
+    print(f"Processing {len(files)} files...")
     
     for filename in files:
         file_path = os.path.join(DATA_FOLDER, filename)
+        print(f"  Loading: {filename}")
         df = load_and_process_file(file_path)
         if not df.empty:
             all_dataframes.append(df)
-            print(f"  ✓ Loaded {filename}: {len(df)} records")
+            print(f"    ✓ Loaded {filename}: {len(df)} records")
+            print(f"    Columns: {list(df.columns)}")
+        else:
+            print(f"    ✗ No records loaded from {filename}")
     
     if not all_dataframes:
+        print(f"ERROR: No data loaded from any files")
         return pd.DataFrame()
     
     # Combine all dataframes
@@ -355,7 +380,8 @@ def load_all_data() -> pd.DataFrame:
         if col in combined_df.columns:
             combined_df[col] = pd.to_numeric(combined_df[col], errors='coerce').fillna(0.0)
     
-    print(f"\nTotal records loaded: {len(combined_df)}")
+    print(f"\nSUCCESS: Total records loaded: {len(combined_df)}")
+    print(f"Final columns: {list(combined_df.columns)}")
     return combined_df
 
 

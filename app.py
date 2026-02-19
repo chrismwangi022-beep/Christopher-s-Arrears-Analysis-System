@@ -143,7 +143,11 @@ def main():
     
     if df.empty:
         st.error("No data loaded. Please check the data folder path.")
+        st.write("Available columns would be:", ["Branch", "Loan_Officer", "Product", "Arrears", "Days", "Principle", "TotalBalance", "AccountID", "Report_Date"])
         return
+    
+    # Log available columns for debugging
+    st.sidebar.info(f"✅ Loaded {len(df)} records with columns: {', '.join(df.columns.tolist())}")
     
     # Sidebar filters
     st.sidebar.title("🔍 Filters")
