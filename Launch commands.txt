@@ -1,7 +1,7 @@
 
 commands
 
-cd C:\Users\ADMIN\Desktop\Christopher\Christopher's Arrears Analysis System
+cd C:\Users\chris\Documents\Christopher's Arrears Analysis System
 
 streamlit run app.py
 

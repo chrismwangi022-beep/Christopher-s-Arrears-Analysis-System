@@ -5,7 +5,7 @@ Constants and configuration for Spread Capital Arrears Analysis System
 import os
 
 # Data Paths
-DATA_FOLDER = r"C:\Users\ADMIN\Desktop\Christopher\Arrears Reports\Arears Reports formating folder\Documents"
+DATA_FOLDER = r"c:\Users\chris\Documents\Christopher's Arrears Analysis System\data"
 
 # Spread Capital Brand Colors
 COLORS = {
