@@ -125,90 +125,79 @@ st.markdown("""
 if 'data_loaded' not in st.session_state:
     st.session_state.data_loaded = False
     st.session_state.df = pd.DataFrame()
-# Load data from data folder (supports multiple Arrears report files)
+# Load data from data folder (with automatic column standardization)
 @st.cache_data
-def load_data():
+def load_and_clean_data():
     """
-    Load and cache data from data folder using relative path.
-    Automatically finds and loads all files matching 'Arrears report' pattern.
-    Supports both .xlsx and .csv files with flexible case-insensitive path checking.
-    Uses os.path.join for cross-platform compatibility (Windows/Linux/Cloud).
+    Working logic: Automatically finds and merges all Excel/CSV reports 
+    from the 'data' folder while standardizing column names.
     """
-    # Get project root directory
+    # 1. Flexible Folder Path (handles 'data' or 'Data' on GitHub/Linux)
     root_dir = os.path.dirname(os.path.abspath(__file__))
-    
-    # Try to find data folder (case-insensitive)
-    data_folders = [
-        os.path.join(root_dir, "data"),
-        os.path.join(root_dir, "Data"),
-    ]
-    
-    data_folder = None
-    for folder in data_folders:
-        if os.path.exists(folder) and os.path.isdir(folder):
-            data_folder = folder
-            break
+    data_folder = next((os.path.join(root_dir, f) for f in ["data", "Data"] 
+                        if os.path.exists(os.path.join(root_dir, f))), None)
     
     if not data_folder:
-        st.error("❌ Data folder not found. Expected 'data' or 'Data' folder in project root.")
-        st.info(
-            "**Solution:** Create a `data` folder in your project root and place your arrears report files there.\n"
-            "Expected file naming format: `YYYY.MM.DD [Branch Name] Arrears report.xlsx`"
-        )
+        st.error("❌ Data folder not found in the repository.")
+        return pd.DataFrame()
+
+    # 2. Find files matching your pattern
+    all_files = os.listdir(data_folder)
+    target_files = [f for f in all_files if f.lower().endswith(('.xlsx', '.csv'))]
+    
+    if not target_files:
+        st.error(f"❌ No Excel or CSV files found in {data_folder}")
         return pd.DataFrame()
     
-    # Find all files matching "Arrears report" pattern
-    try:
-        all_files = os.listdir(data_folder)
-    except Exception as e:
-        st.error(f"❌ Error reading data folder: {str(e)}")
-        return pd.DataFrame()
-    
-    # Filter files: must contain "Arrears report" and be .xlsx or .csv
-    matching_files = [
-        f for f in all_files
-        if ("arrears report" in f.lower()) and (f.lower().endswith('.xlsx') or f.lower().endswith('.csv'))
-    ]
-    
-    if not matching_files:
-        st.error(f"❌ No Arrears report files found in {data_folder}")
-        st.info(
-            f"**Solution:** Place your arrears report files in the `{os.path.basename(data_folder)}` folder.\n"
-            "**Expected naming format:** `YYYY.MM.DD [Branch Name] Arrears report.xlsx`\n"
-            "**Examples:**\n"
-            "  - 2026.02.18 Embu Arrears report.xlsx\n"
-            "  - 2026.02.19 Isiolo Arrears report.xlsx"
-        )
-        return pd.DataFrame()
-    
-    all_dataframes = []
-    
-    # Load each file
-    for filename in matching_files:
-        file_path = os.path.join(data_folder, filename)
+    all_dfs = []
+    for filename in target_files:
+        path = os.path.join(data_folder, filename)
         try:
-            if filename.lower().endswith('.xlsx'):
-                df = pd.read_excel(file_path, engine='openpyxl')
-            else:  # .csv
-                df = pd.read_csv(file_path)
+            # Read based on file type
+            df = pd.read_excel(path, engine='openpyxl') if filename.endswith('.xlsx') else pd.read_csv(path)
             
-            if not df.empty:
-                all_dataframes.append(df)
-                st.success(f"✅ Loaded: {filename} ({len(df)} records)")
-            else:
-                st.warning(f"⚠️ File {filename} is empty")
+            # --- CRITICAL FIX: COLUMN STANDARDIZATION ---
+            # Remove hidden spaces from headers
+            df.columns = df.columns.str.strip()
+            
+            # Case-insensitive mapping for columns that cause KeyErrors
+            mapping = {
+                'branch': 'Branch',
+                'arrears': 'Arrears',
+                'amount in arrears': 'Arrears',
+                'days': 'Days',
+                'days in arrears': 'Days',
+                'loan_officer': 'Loan_Officer',
+                'loan officer': 'Loan_Officer',
+                'product': 'Product',
+                'principle': 'Principle',
+                'principal': 'Principle',
+                'totalbalance': 'TotalBalance',
+                'total balance': 'TotalBalance',
+                'accountid': 'AccountID',
+                'account id': 'AccountID',
+                'membername': 'MemberName',
+                'member name': 'MemberName',
+                'report_date': 'Report_Date',
+                'report date': 'Report_Date',
+            }
+            
+            # Rename columns if they match our aliases (lowercase comparison)
+            for col in df.columns:
+                if col.lower() in mapping:
+                    df = df.rename(columns={col: mapping[col.lower()]})
+            
+            all_dfs.append(df)
+            st.sidebar.success(f"✅ Loaded: {filename}")
         except Exception as e:
-            st.warning(f"⚠️ Error loading {filename}: {str(e)}")
-            continue
-    
-    # Combine all dataframes
-    if all_dataframes:
-        combined_df = pd.concat(all_dataframes, ignore_index=True)
-        st.success(f"✅ Total: {len(combined_df)} records from {len(all_dataframes)} file(s)")
-        return combined_df
-    else:
-        st.error("❌ No data could be loaded from any files.")
-        return pd.DataFrame()
+            st.sidebar.error(f"❌ Error in {filename}: {e}")
+
+    # 3. Combine and return
+    if all_dfs:
+        combined = pd.concat(all_dfs, ignore_index=True)
+        st.sidebar.success(f"✅ Total: {len(combined)} records from {len(all_dfs)} file(s)")
+        return combined
+    return pd.DataFrame()
 
 
 # Helper function to find columns case-insensitively
@@ -256,18 +245,15 @@ def main():
     st.title("📊 Spread Capital - Arrears Analysis System")
     st.markdown("---")
     
-    # Load data from data/data.csv
-    with st.spinner("Loading data from data/data.csv..."):
-        df = load_data()
+    # Load data with automatic column standardization and cleaning
+    with st.spinner("Loading and cleaning data..."):
+        df = load_and_clean_data()
         st.session_state.df = df
         st.session_state.data_loaded = True
     
     if df.empty:
         st.error("❌ No data loaded. Please check the local data folder.")
         return
-    
-    # Standardize and validate columns
-    df = standardize_column_names(df)
     
     # Sidebar filters
     st.sidebar.title("🔍 Filters")
