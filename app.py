@@ -16,7 +16,7 @@ import io
 # Add src to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from src.data_loader import load_all_data, process_uploaded_file
+from src.data_loader import load_all_data
 from src.google_drive_handler import get_drive_handler
 from src.calculations import (
     calculate_par_percentage,
@@ -125,120 +125,44 @@ st.markdown("""
 if 'data_loaded' not in st.session_state:
     st.session_state.data_loaded = False
     st.session_state.df = pd.DataFrame()
-    st.session_state.use_uploaded_data = False
-    st.session_state.uploaded_file_names = []
-
-# Load data from local folder
+# Load data from data/data.csv
 @st.cache_data
 def load_data():
-    """Load and cache data from local folder."""
-    return load_all_data()
-
-# Process uploaded files
-def handle_file_upload(uploaded_files):
-    """Process and save multiple uploaded files."""
-    if not uploaded_files:
-        return False
+    """
+    Load and cache data from data/data.csv using relative path.
+    Uses os.path.join for cross-platform compatibility (Windows/Linux).
+    """
+    # Get project root directory and construct relative path
+    root_dir = os.path.dirname(os.path.abspath(__file__))
+    csv_path = os.path.join(root_dir, "data", "data.csv")
     
-    if not isinstance(uploaded_files, list):
-        uploaded_files = [uploaded_files]
-    
-    all_dataframes = []
-    successful_files = []
-    failed_files = []
+    # Check if file exists
+    if not os.path.exists(csv_path):
+        st.error(f"❌ Data file not found: {csv_path}")
+        st.info("Please ensure the file exists at: `data/data.csv` in the project root directory.")
+        return pd.DataFrame()
     
     try:
-        for uploaded_file in uploaded_files:
-            try:
-                # Process each uploaded file
-                df = process_uploaded_file(uploaded_file)
-                
-                if df.empty:
-                    failed_files.append((uploaded_file.name, "Invalid arrears data"))
-                    continue
-                
-                all_dataframes.append(df)
-                successful_files.append(uploaded_file.name)
-                
-                # Try to save to Google Drive if configured
-                try:
-                    if "google_cloud" in st.secrets and "google_drive" in st.secrets:
-                        drive_handler = get_drive_handler()
-                        
-                        if drive_handler.authenticated:
-                            folder_id = st.secrets.get("google_drive", {}).get("folder_id")
-                            
-                            if folder_id:
-                                # Create a timestamped backup
-                                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                                backup_filename = f"backup_{timestamp}_{uploaded_file.name}"
-                                
-                                # Save to Google Drive
-                                drive_handler.upload_dataframe(
-                                    df,
-                                    backup_filename,
-                                    folder_id=folder_id,
-                                    format="excel"
-                                )
-                except Exception as e:
-                    st.warning(f"⚠️ File '{uploaded_file.name}' processed but Google Drive save failed: {str(e)}")
-                
-            except Exception as e:
-                failed_files.append((uploaded_file.name, str(e)))
-                continue
-        
-        # Combine all dataframes if multiple files
-        if all_dataframes:
-            combined_df = pd.concat(all_dataframes, ignore_index=True)
-            
-            # Store in session state
-            st.session_state.df = combined_df
-            st.session_state.use_uploaded_data = True
-            st.session_state.uploaded_file_names = successful_files
-            st.session_state.data_loaded = True
-            
-            # Display results
-            success_msg = f"✓ Successfully processed {len(successful_files)} file(s) with {len(combined_df)} total records"
-            st.success(success_msg)
-            
-            # Show file details
-            with st.expander("📋 File Processing Details"):
-                if successful_files:
-                    st.markdown("**✓ Successfully Processed:**")
-                    for fname in successful_files:
-                        st.markdown(f"  - {fname}")
-                
-                if failed_files:
-                    st.markdown("**❌ Failed to Process:**")
-                    for fname, reason in failed_files:
-                        st.markdown(f"  - {fname}: {reason}")
-            
-            return True
-        else:
-            st.error("❌ No files could be processed. Please check the file formats and contents.")
-            return False
-        
+        # Read CSV file
+        df = pd.read_csv(csv_path)
+        st.info(f"✓ Data loaded from: {csv_path} ({len(df)} records)")
+        return df
     except Exception as e:
-        st.error(f"❌ Error processing files: {str(e)}")
-        return False
+        st.error(f"❌ Error reading data file: {str(e)}")
+        return pd.DataFrame()
+
+
 
 # Main app
 def main():
     st.title("📊 Spread Capital - Arrears Analysis System")
     st.markdown("---")
     
-    # Load data based on user choice (load from local folder by default)
-    with st.spinner("Loading data..."):
-        if st.session_state.use_uploaded_data and not st.session_state.df.empty:
-            df = st.session_state.df
-            file_names_display = ", ".join(st.session_state.uploaded_file_names) if st.session_state.uploaded_file_names else "Unknown"
-            st.success(f"✓ Using uploaded files: {file_names_display}")
-        else:
-            df = load_data()
-            st.session_state.df = df
-            st.session_state.data_loaded = True
-            if not df.empty:
-                st.info("✓ Data loaded from local folder")
+    # Load data from data/data.csv
+    with st.spinner("Loading data from data/data.csv..."):
+        df = load_data()
+        st.session_state.df = df
+        st.session_state.data_loaded = True
     
     if df.empty:
         st.error("❌ No data loaded. Please upload a file or check the local data folder.")
@@ -758,34 +682,12 @@ def main():
     # Data Source Management Section (at bottom of page)
     # ============================================================================
     st.markdown("---")
-    st.subheader("📁 Data Source Management")
+    st.subheader("📁 Data Source")
     
-    col_upload, col_source = st.columns([2, 1])
-    
-    with col_upload:
-        st.info(
-            "**Upload multiple CSV or Excel files** with your arrears data. "
-            "Files are automatically combined and saved to Google Drive for backup and version control."
-        )
-        uploaded_files = st.file_uploader(
-            "Choose one or more CSV or Excel files",
-            type=["csv", "xlsx", "xls"],
-            accept_multiple_files=True,
-            help="Upload one or more arrears reports in CSV or Excel format. Files will be combined."
-        )
-        
-        if uploaded_files:
-            if st.button("📤 Upload & Process Files", key="upload_btn"):
-                with st.spinner("Processing files..."):
-                    if handle_file_upload(uploaded_files):
-                        st.rerun()
-    
-    with col_source:
-        st.write("**Data Source Options:**")
-        if st.button("📂 Load Local Data", key="local_btn", use_container_width=True):
-            st.session_state.use_uploaded_data = False
-            st.session_state.data_loaded = False
-            st.rerun()
+    st.info(
+        "**Data is automatically loaded from** `data/data.csv` in the project root directory. "
+        "This ensures compatibility with GitHub and Streamlit Cloud deployments."
+    )
     
 
 if __name__ == "__main__":
