@@ -108,15 +108,20 @@ def calculate_par_percentage(df: pd.DataFrame) -> float:
     """
     Calculate Portfolio at Risk (PAR) percentage.
     PAR % = (Sum of Arrears for accounts with Days > 0) / Total Portfolio × 100
+    Handles missing columns gracefully.
     """
     if df.empty:
+        return 0.0
+    
+    # Check if required columns exist
+    if 'Days' not in df.columns or 'Arrears' not in df.columns:
         return 0.0
     
     # Filter accounts with Days > 0 (in arrears)
     in_arrears = df[df['Days'].notna() & (df['Days'] > 0)]
     
     total_arrears = in_arrears['Arrears'].sum()
-    total_portfolio = df['Principle'].sum() if 'Principle' in df.columns else df['TotalBalance'].sum()
+    total_portfolio = df['Principle'].sum() if 'Principle' in df.columns else (df['TotalBalance'].sum() if 'TotalBalance' in df.columns else 0)
     
     if total_portfolio == 0:
         return 0.0
@@ -161,16 +166,19 @@ def calculate_arrears_to_portfolio_ratio(df: pd.DataFrame, group_by: Optional[st
 
 def get_top_risk_branch(df: pd.DataFrame) -> Optional[Tuple[str, float]]:
     """Get branch with highest total arrears."""
-    if df.empty or 'Branch' not in df.columns:
+    if df.empty or 'Branch' not in df.columns or 'Arrears' not in df.columns:
         return None
     
-    branch_totals = df.groupby('Branch')['Arrears'].sum().sort_values(ascending=False)
-    if branch_totals.empty:
+    try:
+        branch_totals = df.groupby('Branch')['Arrears'].sum().sort_values(ascending=False)
+        if branch_totals.empty:
+            return None
+        
+        top_branch = branch_totals.index[0]
+        top_amount = branch_totals.iloc[0]
+        return (top_branch, top_amount)
+    except Exception:
         return None
-    
-    top_branch = branch_totals.index[0]
-    top_amount = branch_totals.iloc[0]
-    return (top_branch, top_amount)
 
 
 def get_top_risk_product(df: pd.DataFrame) -> Optional[Tuple[str, float]]:
