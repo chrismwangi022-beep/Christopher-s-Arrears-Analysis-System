@@ -130,26 +130,48 @@ if 'data_loaded' not in st.session_state:
 def load_data():
     """
     Load and cache data from data/data.csv using relative path.
-    Uses os.path.join for cross-platform compatibility (Windows/Linux).
+    Flexible path checking for case-sensitivity variations (Windows/Linux/Cloud).
+    Uses os.path.join for cross-platform compatibility.
     """
-    # Get project root directory and construct relative path
+    # Get project root directory
     root_dir = os.path.dirname(os.path.abspath(__file__))
-    csv_path = os.path.join(root_dir, "data", "data.csv")
     
-    # Check if file exists
-    if not os.path.exists(csv_path):
-        st.error(f"❌ Data file not found: {csv_path}")
-        st.info("Please ensure the file exists at: `data/data.csv` in the project root directory.")
-        return pd.DataFrame()
+    # Try multiple path variations to handle case-sensitivity differences
+    possible_paths = [
+        os.path.join(root_dir, "data", "data.csv"),
+        os.path.join(root_dir, "Data", "data.csv"),
+        os.path.join(root_dir, "data", "Data.csv"),
+        os.path.join(root_dir, "Data", "Data.csv"),
+        os.path.join(root_dir, "data.csv"),  # Just in case it's in the root
+    ]
     
-    try:
-        # Read CSV file
-        df = pd.read_csv(csv_path)
-        st.info(f"✓ Data loaded from: {csv_path} ({len(df)} records)")
-        return df
-    except Exception as e:
-        st.error(f"❌ Error reading data file: {str(e)}")
-        return pd.DataFrame()
+    df = None
+    found_path = None
+    
+    # Try each possible path
+    for path in possible_paths:
+        if os.path.exists(path):
+            try:
+                df = pd.read_csv(path)
+                found_path = path
+                st.success(f"✅ Data loaded from: {path} ({len(df)} records)")
+                return df
+            except Exception as e:
+                st.warning(f"⚠️ Found file at {path} but error reading it: {str(e)}")
+                continue
+    
+    # If we get here, file was not found or couldn't be read
+    st.error("❌ Data file not found in any of the expected locations:")
+    for path in possible_paths:
+        st.error(f"  - {path}")
+    st.info(
+        "**Solution options:**\n"
+        "1. Ensure your GitHub folder contains a `data` folder with `data.csv`\n"
+        "2. Or place `data.csv` in the project root directory\n"
+        "3. The folder name can be 'data' or 'Data' (case-insensitive)\n"
+        "4. The file name can be 'data.csv' or 'Data.csv' (case-insensitive)"
+    )
+    return pd.DataFrame()
 
 
 
