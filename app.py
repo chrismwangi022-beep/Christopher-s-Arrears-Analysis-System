@@ -125,24 +125,32 @@ st.markdown("""
 if 'data_loaded' not in st.session_state:
     st.session_state.data_loaded = False
     st.session_state.df = pd.DataFrame()
-# Load data from data/data.csv
+# Load data from data folder (supports both CSV and Excel)
 @st.cache_data
 def load_data():
     """
-    Load and cache data from data/data.csv using relative path.
-    Flexible path checking for case-sensitivity variations (Windows/Linux/Cloud).
-    Uses os.path.join for cross-platform compatibility.
+    Load and cache data from data folder using relative path.
+    Supports both .csv and .xlsx files with flexible case-insensitive path checking.
+    Uses os.path.join for cross-platform compatibility (Windows/Linux/Cloud).
     """
     # Get project root directory
     root_dir = os.path.dirname(os.path.abspath(__file__))
     
     # Try multiple path variations to handle case-sensitivity differences
+    # Checks for both CSV and Excel files
     possible_paths = [
+        # Excel files (.xlsx) - priority
+        os.path.join(root_dir, "data", "data.xlsx"),
+        os.path.join(root_dir, "Data", "data.xlsx"),
+        os.path.join(root_dir, "data", "Data.xlsx"),
+        os.path.join(root_dir, "Data", "Data.xlsx"),
+        os.path.join(root_dir, "data.xlsx"),
+        # CSV files (.csv) - fallback
         os.path.join(root_dir, "data", "data.csv"),
         os.path.join(root_dir, "Data", "data.csv"),
         os.path.join(root_dir, "data", "Data.csv"),
         os.path.join(root_dir, "Data", "Data.csv"),
-        os.path.join(root_dir, "data.csv"),  # Just in case it's in the root
+        os.path.join(root_dir, "data.csv"),
     ]
     
     df = None
@@ -152,10 +160,17 @@ def load_data():
     for path in possible_paths:
         if os.path.exists(path):
             try:
-                df = pd.read_csv(path)
-                found_path = path
-                st.success(f"✅ Data loaded from: {path} ({len(df)} records)")
-                return df
+                # Determine file type and use appropriate reader
+                if path.lower().endswith('.xlsx'):
+                    df = pd.read_excel(path, engine='openpyxl')
+                    found_path = path
+                    st.success(f"✅ Excel data loaded from: {path} ({len(df)} records)")
+                    return df
+                elif path.lower().endswith('.csv'):
+                    df = pd.read_csv(path)
+                    found_path = path
+                    st.success(f"✅ CSV data loaded from: {path} ({len(df)} records)")
+                    return df
             except Exception as e:
                 st.warning(f"⚠️ Found file at {path} but error reading it: {str(e)}")
                 continue
@@ -166,10 +181,11 @@ def load_data():
         st.error(f"  - {path}")
     st.info(
         "**Solution options:**\n"
-        "1. Ensure your GitHub folder contains a `data` folder with `data.csv`\n"
-        "2. Or place `data.csv` in the project root directory\n"
+        "1. Place a `data.xlsx` or `data.csv` file in a `data` folder in the project root\n"
+        "2. Or place the file directly in the project root directory\n"
         "3. The folder name can be 'data' or 'Data' (case-insensitive)\n"
-        "4. The file name can be 'data.csv' or 'Data.csv' (case-insensitive)"
+        "4. The file name can be 'Data.xlsx', 'data.xlsx', 'Data.csv', or 'data.csv' (case-insensitive)\n"
+        "5. Ensure openpyxl is installed for Excel files: `pip install openpyxl`"
     )
     return pd.DataFrame()
 
