@@ -4,8 +4,10 @@ Constants and configuration for Spread Capital Arrears Analysis System
 
 import os
 
-# Data Paths
-DATA_FOLDER = r"C:\Users\ADMIN\Desktop\Christopher\Arrears Reports\Arears Reports formating folder\Documents"
+# Data Paths - Use relative path for GitHub/Streamlit Cloud compatibility
+# Get root directory (parent of src/) and join with data folder
+_root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_FOLDER = os.path.join(_root_dir, "data")
 
 # Spread Capital Brand Colors
 COLORS = {

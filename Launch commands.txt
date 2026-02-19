@@ -8,3 +8,24 @@ streamlit run app.py
 
   Local URL: http://localhost:8501
   Network URL: http://192.168.1.193:8501
+  
+  
+  <script type="module">
+  // Import the functions you need from the SDKs you need
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-app.js";
+  // TODO: Add SDKs for Firebase products that you want to use
+  // https://firebase.google.com/docs/web/setup#available-libraries
+
+  // Your web app's Firebase configuration
+  const firebaseConfig = {
+    apiKey: "AIzaSyDiwDjAtF9JbeEYjHVz_F8qLPsIp0uUDeY",
+    authDomain: "chriistopher-arrears-analysis.firebaseapp.com",
+    projectId: "chriistopher-arrears-analysis",
+    storageBucket: "chriistopher-arrears-analysis.firebasestorage.app",
+    messagingSenderId: "793596099311",
+    appId: "1:793596099311:web:af28fefc4d02610b17391a"
+  };
+
+  // Initialize Firebase
+  const app = initializeApp(firebaseConfig);
+</script>
