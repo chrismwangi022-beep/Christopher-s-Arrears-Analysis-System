@@ -61,13 +61,14 @@ def extract_date_from_filename(filename: str) -> Optional[datetime.date]:
 
     Falls back to None if no parseable date is found.
     """
-    # Common date patterns: YYYY-MM-DD, DD-MM-YYYY, YYYYMMDD, DDMMYYYY
-    patterns = [r"(\d{4}-\d{2}-\d{2})", r"(\d{2}-\d{2}-\d{4})", r"(\d{8})"]
+    # Common date patterns: YYYY-MM-DD, YYYY.MM.DD, DD-MM-YYYY, DD.MM.YYYY, YYYYMMDD
+    patterns = [r"(\d{4}[-\.]\d{2}[-\.]\d{2})", r"(\d{2}[-\.]\d{2}[-\.]\d{4})", r"(\d{8})"]
     for p in patterns:
         m = re.search(p, filename)
         if m:
             s = m.group(1)
-            for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%Y%m%d", "%d%m%Y"):
+            # Try a range of common formats including dot-separated dates
+            for fmt in ("%Y-%m-%d", "%Y.%m.%d", "%d-%m-%Y", "%d.%m.%Y", "%Y%m%d", "%d%m%Y"):
                 try:
                     return datetime.strptime(s, fmt).date()
                 except Exception:
