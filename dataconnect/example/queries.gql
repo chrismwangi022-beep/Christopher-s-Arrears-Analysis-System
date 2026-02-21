@@ -1,0 +1,45 @@
+query GetMyDatasets @auth(level: USER) {
+  datasets(where: {userId: {eq_expr: "auth.uid"}}) {
+    id
+    name
+    fileType
+    uploadDate
+  }
+}
+
+mutation CreateDataset($name: String!, $fileType: String!, $storagePath: String!, $description: String) @auth(level: USER) {
+  dataset_insert(data: {
+    userId_expr: "auth.uid",
+    name: $name,
+    fileType: $fileType,
+    storagePath: $storagePath,
+    description: $description,
+    uploadDate_expr: "request.time"
+  }) {
+    id
+  }
+}
+
+query ListAllPublicShares @auth(level: PUBLIC, insecureReason: "This operation is safe to expose to the public") {
+  shares(where: {shareType: {eq: "public"}}) {
+    id
+    sharedEntityId
+    shareType
+    sharer {
+      displayName
+    }
+  }
+}
+
+mutation ShareDatasetWithUser($sharedEntityId: UUID!, $shareeId: UUID!, $permissions: String!) @auth(level: USER) {
+  share_insert(data: {
+    sharerId_expr: "auth.uid",
+    shareeId: $shareeId,
+    sharedEntityId: $sharedEntityId,
+    permissions: $permissions,
+    shareType: "private",
+    sharedAt_expr: "request.time"
+  }) {
+    id
+  }
+}
