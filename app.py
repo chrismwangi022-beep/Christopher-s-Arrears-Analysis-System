@@ -201,30 +201,32 @@ def main():
     aging_options = ["All"] + aging_base_options
     selected_aging = st.sidebar.multiselect("Select Aging Buckets", aging_options, default=["All"])
     
+    # --- REFACTOR: Categorize once, then filter if needed. This df is used for all displays. ---
+    df_categorized = categorize_by_aging(df_filtered)
+    
     if selected_aging and "All" not in selected_aging:
-        df_categorized = categorize_by_aging(df_filtered)
-        df_filtered = df_categorized[df_categorized['Aging_Bucket'].isin(selected_aging)]
+        df_display = df_categorized[df_categorized['Aging_Bucket'].isin(selected_aging)]
+    else:
+        df_display = df_categorized
     
     # Display filtered record count
     st.sidebar.markdown("---")
-    st.sidebar.metric("Records", len(df_filtered))
+    st.sidebar.metric("Records", len(df_display))
     
-    if df_filtered.empty:
+    if df_display.empty:
         st.warning("No data matches the selected filters.")
         return
     
-    
-
     # KPI Cards Row (Love Look - 5 high-impact KPIs)
     st.subheader("📈 Key Performance Indicators")
     
     col1, col2, col3, col4, col5 = st.columns(5)
     
-    total_arrears = df_filtered['Arrears'].sum()
-    total_portfolio = df_filtered['Principle'].sum() if 'Principle' in df_filtered.columns else df_filtered['TotalBalance'].sum()
-    accounts_in_arrears = len(df_filtered[df_filtered['Days'].notna() & (df_filtered['Days'] > 0)])
-    avg_days = df_filtered[df_filtered['Days'].notna() & (df_filtered['Days'] > 0)]['Days'].mean() or 0
-    par_percentage = calculate_par_percentage(df_filtered)
+    total_arrears = df_display['Arrears'].sum()
+    total_portfolio = df_display['Principle'].sum() if 'Principle' in df_display.columns else df_display['TotalBalance'].sum()
+    accounts_in_arrears = len(df_display[df_display['Days'].notna() & (df_display['Days'] > 0)])
+    avg_days = df_display[df_display['Days'].notna() & (df_display['Days'] > 0)]['Days'].mean() or 0
+    par_percentage = calculate_par_percentage(df_display)
     
     # 1. Total Arrears
     with col1:
@@ -282,7 +284,7 @@ def main():
     
     with col_chart1:
         # Arrears by Branch
-        branch_totals = df_filtered.groupby('Branch')['Arrears'].sum().sort_values(ascending=False)
+        branch_totals = df_display.groupby('Branch')['Arrears'].sum().sort_values(ascending=False)
         if not branch_totals.empty:
             fig_branch = go.Figure(data=[
                 go.Bar(
@@ -304,7 +306,7 @@ def main():
     
     with col_chart2:
         # Arrears by Product - Pie chart (JENGA vs DUMISHA vs others)
-        product_totals = df_filtered.groupby('Product')['Arrears'].sum().reset_index()
+        product_totals = df_display.groupby('Product')['Arrears'].sum().reset_index()
         if not product_totals.empty:
             # Highlight JENGA and DUMISHA explicitly, others remain separate
             fig_product = px.pie(
@@ -324,8 +326,7 @@ def main():
     
     # Arrears by Aging
     st.subheader("Arrears by Aging Buckets")
-    df_categorized = categorize_by_aging(df_filtered)
-    aging_totals = df_categorized.groupby('Aging_Bucket')['Arrears'].sum()
+    aging_totals = df_display.groupby('Aging_Bucket')['Arrears'].sum()
     
     if not aging_totals.empty:
         # Color mapping for aging buckets
@@ -361,7 +362,7 @@ def main():
     # Strategic Portfolio Recommendations
     st.subheader("📊 Strategic Portfolio Recommendations")
     
-    priority_summary = get_priority_band_summary(df_filtered)
+    priority_summary = get_priority_band_summary(df_display)
     
     for _, row in priority_summary.iterrows():
         priority = row['Priority']
@@ -374,7 +375,7 @@ def main():
             continue
         
         # Get top accounts for this band
-        top_accounts = get_top_accounts_by_band(df_filtered, priority, top_n=5)
+        top_accounts = get_top_accounts_by_band(df_display, priority, top_n=5)
         
         # Determine emoji
         emoji_map = {
@@ -400,7 +401,7 @@ def main():
     # Action-level worklist: exactly which account needs what action
     st.markdown("---")
     st.subheader("🧾 Action-Level Worklist")
-    worklist_df = categorize_by_aging(df_filtered)
+    worklist_df = df_display.copy() # Use the already categorized display dataframe
     
     def map_action(bucket: str) -> str:
         if bucket == "Early Warning (1-30)":
@@ -428,26 +429,29 @@ def main():
         view = df_tab[cols_to_show].copy()
         st.dataframe(view, use_container_width=True)
 
-        # CSV export
-        csv_bytes = view.to_csv(index=False).encode("utf-8-sig")
-        st.download_button(
-            label=f"⬇️ Download {label_prefix} List (CSV)",
-            data=csv_bytes,
-            file_name=f"{label_prefix.replace(' ', '_').lower()}_worklist.csv",
-            mime="text/csv",
-        )
-
-        # Excel export
-        buffer = io.BytesIO()
-        with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-            view.to_excel(writer, index=False, sheet_name="Worklist")
-        buffer.seek(0)
-        st.download_button(
-            label=f"⬇️ Download {label_prefix} List (Excel)",
-            data=buffer,
-            file_name=f"{label_prefix.replace(' ', '_').lower()}_worklist.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
+        # --- REFACTOR: Place download buttons side-by-side ---
+        dl_col1, dl_col2 = st.columns(2)
+        with dl_col1:
+            # CSV export
+            csv_bytes = view.to_csv(index=False).encode("utf-8-sig")
+            st.download_button(
+                label=f"⬇️ Download {label_prefix} List (CSV)",
+                data=csv_bytes,
+                file_name=f"{label_prefix.replace(' ', '_').lower()}_worklist.csv",
+                mime="text/csv",
+            )
+        with dl_col2:
+            # Excel export
+            buffer = io.BytesIO()
+            with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+                view.to_excel(writer, index=False, sheet_name="Worklist")
+            buffer.seek(0)
+            st.download_button(
+                label=f"⬇️ Download {label_prefix} List (Excel)",
+                data=buffer,
+                file_name=f"{label_prefix.replace(' ', '_').lower()}_worklist.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
 
     with tab_call:
         call_df = worklist_df[worklist_df['Recommended_Action'].str.contains("Call Back")]
@@ -470,20 +474,20 @@ def main():
     
     with col_rank1:
         st.markdown("### Top Risk Branch")
-        top_branch = get_top_risk_branch(df_filtered)
+        top_branch = get_top_risk_branch(df_display)
         if top_branch:
             branch_name, branch_amount = top_branch
             st.metric("Branch", branch_name.title(), f"{CURRENCY_SYMBOL} {branch_amount:,.0f}")
         
         st.markdown("### Top Risk Product")
-        top_product = get_top_risk_product(df_filtered)
+        top_product = get_top_risk_product(df_display)
         if top_product:
             product_name, product_ratio = top_product
             st.metric("Product", product_name, f"Ratio: {product_ratio:.2%}")
     
     with col_rank2:
         st.markdown("### Officer Performance – Praise vs Improve")
-        officer_perf = get_officer_performance(df_filtered)
+        officer_perf = get_officer_performance(df_display)
         if not officer_perf.empty:
             # Best 5 (praise) and worst 5 (needs improvement)
             best = officer_perf.nsmallest(5, 'Ratio')
@@ -511,7 +515,7 @@ def main():
     if selected_branches and len(selected_branches) == 1:
         branch = selected_branches[0]
         risk_pct = get_branch_risk_percentage(df, branch)
-        main_product = get_main_driver_product_in_branch(df_filtered, branch)
+        main_product = get_main_driver_product_in_branch(df_display, branch)
         
         st.markdown("### Branch-Specific Insights")
         st.info(f"**Branch {branch.title()}** currently holds **{risk_pct:.2f}%** of total portfolio risk.")
@@ -521,7 +525,7 @@ def main():
     # Portfolio Distribution by Aging
     st.markdown("---")
     st.subheader("📈 Portfolio Distribution by Aging Buckets")
-    portfolio_dist = get_portfolio_distribution_by_aging(df_filtered)
+    portfolio_dist = get_portfolio_distribution_by_aging(df_display)
     if not portfolio_dist.empty:
         st.dataframe(portfolio_dist, use_container_width=True)
         
@@ -543,96 +547,38 @@ def main():
         fig_pie.update_traces(textposition='inside', textinfo='percent+label+value')
         st.plotly_chart(fig_pie, use_container_width=True)
 
-        # Trend Movement Analysis expander (moved here: uses historical data but respects Branch/Officer selections)
-        with st.expander("📈 View Arrears Trend Movement", expanded=False):
-            # Build df_trend from full dataset but apply selected Branch/Officer filters
-            df_trend = df.copy()
-            # apply branch filter selections from sidebar if present
-            try:
-                if selected_branches and "All" not in selected_branches:
-                    df_trend = df_trend[df_trend['Branch'].isin(selected_branches)]
-            except NameError:
-                pass
-            try:
-                if selected_officers and "All" not in selected_officers:
-                    df_trend = df_trend[df_trend['Loan_Officer'].isin(selected_officers)]
-            except NameError:
-                pass
-
-            # Radio to choose comparison entity
-            compare_choice = st.radio("Compare Trend By:", ["Branch", "Loan Officer"])
-            grp_col = 'Branch' if compare_choice == 'Branch' else 'Loan_Officer'
-
-            if 'Report_Date' in df_trend.columns:
-                df_trend = df_trend.copy()
-                df_trend['Report_Date'] = pd.to_datetime(df_trend['Report_Date'], errors='coerce')
-                df_trend = df_trend.dropna(subset=['Report_Date'])
-
-                trend_df = df_trend.groupby([pd.Grouper(key='Report_Date', freq='D'), grp_col])['Arrears'].sum().reset_index()
-                if not trend_df.empty:
-                    try:
-                        colors_list = [COLORS['accent_cyan'], COLORS['accent_orange'], COLORS['accent_amber'], COLORS['accent_red'], COLORS['accent_yellow']]
-                        fig_trend = px.line(trend_df, x='Report_Date', y='Arrears', color=grp_col, markers=True, color_discrete_sequence=colors_list)
-                        fig_trend.update_layout(
-                            title="Arrears Movement Over Time",
-                            template='plotly_dark',
-                            height=360,
-                            legend_title=grp_col,
-                        )
-                        st.plotly_chart(fig_trend, use_container_width=True)
-                    except Exception as e:
-                        st.error(f"Error plotting trend movement: {e}")
-                else:
-                    st.info("No historical data available for the selected Branch/Officer filters.")
-            else:
-                st.info("No `Report_Date` column available in dataset to show trends.")
-
-    # --- Daily Arrears Movement (moved to bottom of page) ---
+    # --- REFACTOR: Consolidated Trend Analysis Section ---
     st.markdown("---")
-    st.subheader("📈 Daily Arrears Movement")
-    group_choice = st.radio("Group Movement By:", ["Branch", "Loan_Officer", "Product"], horizontal=True)
+    st.subheader("📈 Trend Analysis")
+    group_choice = st.radio("Group Trends By:", ["Branch", "Loan_Officer", "Product"], horizontal=True, key="trend_group")
 
-    # Build trend dataframe from full df (ignore selected_date) but apply other sidebar filters
+    # Build trend dataframe from the full dataset (df), but apply the entity filters from the sidebar.
+    # This ignores the date filter to show historical trends for the selected entities.
     df_trend = df.copy()
-    # apply branch filter selections
-    try:
-        if selected_branches and "All" not in selected_branches:
-            df_trend = df_trend[df_trend['Branch'].isin(selected_branches)]
-    except NameError:
-        pass
-    # apply officer filter selections
-    try:
-        if selected_officers and "All" not in selected_officers:
-            df_trend = df_trend[df_trend['Loan_Officer'].isin(selected_officers)]
-    except NameError:
-        pass
-    # apply product filter selections
-    try:
-        if selected_products and "All" not in selected_products:
-            df_trend = df_trend[df_trend['Product'].isin(selected_products)]
-    except NameError:
-        pass
+    if selected_branches and "All" not in selected_branches:
+        df_trend = df_trend[df_trend['Branch'].isin(selected_branches)]
+    if selected_officers and "All" not in selected_officers:
+        df_trend = df_trend[df_trend['Loan_Officer'].isin(selected_officers)]
+    if selected_products and "All" not in selected_products:
+        df_trend = df_trend[df_trend['Product'].isin(selected_products)]
 
     if 'Report_Date' in df_trend.columns:
         df_trend = df_trend.copy()
         df_trend['Report_Date'] = pd.to_datetime(df_trend['Report_Date'], errors='coerce')
         df_trend = df_trend.dropna(subset=['Report_Date'])
 
-        grp_col = group_choice
-        trend_grp = df_trend.groupby([pd.Grouper(key='Report_Date', freq='D'), grp_col])['Arrears'].sum().reset_index()
+        trend_grp = df_trend.groupby([pd.Grouper(key='Report_Date', freq='D'), group_choice])['Arrears'].sum().reset_index()
 
         # If 'All' selected and too many entities, limit to top 10 by total arrears
-        try:
-            selected_list = selected_branches if grp_col == 'Branch' else (selected_officers if grp_col == 'Loan_Officer' else selected_products)
-        except NameError:
-            selected_list = None
+        selected_list_map = {"Branch": selected_branches, "Loan_Officer": selected_officers, "Product": selected_products}
+        selected_list = selected_list_map.get(group_choice)
 
         if selected_list is not None and "All" in selected_list:
             # compute top entities by total arrears
-            totals = df_trend.groupby(grp_col)['Arrears'].sum().nlargest(10)
+            totals = df_trend.groupby(group_choice)['Arrears'].sum().nlargest(10)
             top_entities = totals.index.tolist()
-            if trend_grp[grp_col].nunique() > 10:
-                trend_grp = trend_grp[trend_grp[grp_col].isin(top_entities)]
+            if trend_grp[group_choice].nunique() > 10:
+                trend_grp = trend_grp[trend_grp[group_choice].isin(top_entities)]
 
         if not trend_grp.empty:
             try:
@@ -641,19 +587,19 @@ def main():
                     trend_grp,
                     x='Report_Date',
                     y='Arrears',
-                    color=grp_col,
+                    color=group_choice,
                     markers=True,
                     color_discrete_sequence=palette,
                 )
                 fig_daily.update_traces(hovertemplate=f"%{{x}}<br>Arrears: {CURRENCY_SYMBOL} %{{y:,.0f}}<extra></extra>")
-                fig_daily.update_layout(height=450, template='plotly_dark', title='Arrears Movement Over Time')
+                fig_daily.update_layout(height=450, template='plotly_dark', title=f'Arrears Movement Over Time by {group_choice}')
                 st.plotly_chart(fig_daily, use_container_width=True)
             except Exception as e:
-                st.error(f"Error plotting daily arrears movement: {e}")
+                st.error(f"Error plotting trend analysis: {e}")
         else:
-            st.info("No historical data available for the selected filters to plot daily movement.")
+            st.info("No historical data available for the selected filters to plot trends.")
     else:
-        st.info("No `Report_Date` column in dataset; cannot plot daily movement.")
+        st.info("No `Report_Date` column in dataset; cannot plot trends.")
     
 
 if __name__ == "__main__":

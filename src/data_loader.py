@@ -137,6 +137,109 @@ def extract_branch_and_officer(df: pd.DataFrame, filename: str) -> pd.DataFrame:
     return df
 
 
+def _extract_records_from_df(df: pd.DataFrame, filename: str, report_date: Optional[datetime.date]) -> pd.DataFrame:
+    """Core logic to process a raw DataFrame and extract valid arrears records."""
+    # Detect columns
+    arrears_col = detect_column_by_pattern(df, COLUMN_PATTERNS["arrears"], DEFAULT_COLUMNS["arrears"])
+    principle_col = detect_column_by_pattern(df, COLUMN_PATTERNS["principle"], DEFAULT_COLUMNS["principle"])
+    total_balance_col = detect_column_by_pattern(df, COLUMN_PATTERNS["total_balance"], DEFAULT_COLUMNS["total_balance"])
+    days_col = detect_column_by_pattern(df, COLUMN_PATTERNS["days"], DEFAULT_COLUMNS["days"])
+    product_col = detect_column_by_pattern(df, COLUMN_PATTERNS["product"], DEFAULT_COLUMNS["product"])
+    account_id_col = detect_column_by_pattern(df, COLUMN_PATTERNS["account_id"], DEFAULT_COLUMNS["account_id"])
+    member_name_col = detect_column_by_pattern(df, COLUMN_PATTERNS.get("member_name", []), DEFAULT_COLUMNS.get("member_name"))
+
+    # Find first numeric row in arrears column to identify potential data rows
+    data_rows = []
+    for idx in range(len(df)):
+        row = df.iloc[idx]
+        if arrears_col is not None and arrears_col < len(row):
+            arrears_val = row.iloc[arrears_col]
+            try:
+                float_val = float(str(arrears_val).replace(',', '').replace(' ', ''))
+                if float_val > 0:  # A simple heuristic to find data
+                    data_rows.append(idx)
+            except (ValueError, AttributeError):
+                continue
+
+    if not data_rows:
+        return pd.DataFrame()
+
+    # Build result dataframe
+    result_data = []
+    for idx in data_rows:
+        row = df.iloc[idx]
+
+        # --- DATA CLEANING: ensure this is a real account row ---
+        member_no_raw = str(row.iloc[account_id_col]).strip() if account_id_col is not None and account_id_col < len(row) else ""
+        member_name_raw = str(row.iloc[member_name_col]).strip() if member_name_col is not None and member_name_col < len(row) else ""
+        product_raw = str(row.iloc[product_col]).strip() if product_col is not None and product_col < len(row) else ""
+
+        # Apply cleaning rules:
+        if not member_name_raw or member_name_raw.lower() in ["nan", "none", ""]: continue
+        if member_no_raw and any(word in member_no_raw.lower() for word in ["branch", "total"]): continue
+        if not product_raw or product_raw.lower() in ["nan", "none", ""]: continue
+
+        # At this point we consider the row a valid loan account
+        record = {
+            'Branch': str(row['Branch']) if pd.notna(row['Branch']) else extract_branch_from_filename(filename),
+            'Loan_Officer': str(row['Loan_Officer']) if pd.notna(row['Loan_Officer']) else None,
+            'MemberName': member_name_raw,
+            'Report_Date': report_date,
+        }
+
+        # Extract values with error handling
+        def extract_numeric(col_idx, key):
+            if col_idx is not None and col_idx < len(row):
+                try:
+                    val_str = str(row.iloc[col_idx]).replace(',', '').replace(' ', '')
+                    return float(val_str) if val_str else None
+                except (ValueError, AttributeError):
+                    return None
+            return None
+
+        record['Arrears'] = extract_numeric(arrears_col, 'Arrears') or 0.0
+        record['Principle'] = extract_numeric(principle_col, 'Principle')
+        record['TotalBalance'] = extract_numeric(total_balance_col, 'TotalBalance')
+
+        days_val = extract_numeric(days_col, 'Days')
+        record['Days'] = int(days_val) if days_val is not None else None
+
+        record['Product'] = product_raw if product_raw else "Unspecified"
+
+        if account_id_col is not None and account_id_col < len(row):
+            account_val = str(row.iloc[account_id_col]).strip()
+            record['AccountID'] = account_val if account_val and account_val.lower() not in ["none", "nan", ""] else None
+        else:
+            record['AccountID'] = None
+
+        result_data.append(record)
+
+    if not result_data:
+        return pd.DataFrame()
+
+    result_df = pd.DataFrame(result_data)
+
+    # Fill missing Principle/TotalBalance with fallbacks
+    if 'Principle' in result_df.columns:
+        result_df['Principle'] = pd.to_numeric(result_df['Principle'], errors='coerce').fillna(result_df['Arrears'])
+    else:
+        result_df['Principle'] = result_df['Arrears']
+
+    if 'TotalBalance' in result_df.columns:
+        result_df['TotalBalance'] = pd.to_numeric(result_df['TotalBalance'], errors='coerce').fillna(
+            result_df['Principle'] + result_df['Arrears']
+        )
+    else:
+        result_df['TotalBalance'] = result_df['Principle'] + result_df['Arrears']
+
+    # Ensure numeric columns are properly typed
+    for col in ['Arrears', 'Principle', 'TotalBalance']:
+        if col in result_df.columns:
+            result_df[col] = pd.to_numeric(result_df[col], errors='coerce').fillna(0.0)
+
+    return result_df
+
+
 def load_and_process_file(file_path: str) -> pd.DataFrame:
     """Load a single CSV or Excel file and process it."""
     filename = os.path.basename(file_path)
@@ -159,155 +262,11 @@ def load_and_process_file(file_path: str) -> pd.DataFrame:
         # Fill NaN with empty strings for easier string operations
         df = df.fillna('')
         
-        # Extract Branch and Loan Officer
+        # Extract Branch and Loan Officer context
         df = extract_branch_and_officer(df, filename)
         
-        # Detect columns
-        arrears_col = detect_column_by_pattern(df, COLUMN_PATTERNS["arrears"], DEFAULT_COLUMNS["arrears"])
-        principle_col = detect_column_by_pattern(df, COLUMN_PATTERNS["principle"], DEFAULT_COLUMNS["principle"])
-        total_balance_col = detect_column_by_pattern(df, COLUMN_PATTERNS["total_balance"], DEFAULT_COLUMNS["total_balance"])
-        days_col = detect_column_by_pattern(df, COLUMN_PATTERNS["days"], DEFAULT_COLUMNS["days"])
-        product_col = detect_column_by_pattern(df, COLUMN_PATTERNS["product"], DEFAULT_COLUMNS["product"])
-        account_id_col = detect_column_by_pattern(df, COLUMN_PATTERNS["account_id"], DEFAULT_COLUMNS["account_id"])
-        member_name_col = detect_column_by_pattern(df, COLUMN_PATTERNS.get("member_name", []), DEFAULT_COLUMNS.get("member_name"))
-        
-        # Extract data rows (skip header rows)
-        # Find first numeric row in arrears column
-        data_rows = []
-        for idx in range(len(df)):
-            row = df.iloc[idx]
-            if arrears_col is not None and arrears_col < len(row):
-                arrears_val = row.iloc[arrears_col]
-                # Try to convert to float
-                try:
-                    float_val = float(str(arrears_val).replace(',', '').replace(' ', ''))
-                    if float_val > 0:  # Valid arrears value
-                        data_rows.append(idx)
-                except (ValueError, AttributeError):
-                    continue
-        
-        if not data_rows:
-            return pd.DataFrame()
-        
-        # Build result dataframe
-        result_data = []
-        for idx in data_rows:
-            row = df.iloc[idx]
-
-            # --- DATA CLEANING: ensure this is a real account row ---
-            # MemberNo (AccountID) must not contain 'branch' or 'total'
-            member_no_raw = ""
-            if account_id_col is not None and account_id_col < len(row):
-                member_no_raw = str(row.iloc[account_id_col]).strip()
-
-            # MemberName must be non-empty
-            member_name_raw = ""
-            if member_name_col is not None and member_name_col < len(row):
-                member_name_raw = str(row.iloc[member_name_col]).strip()
-
-            # Product must be non-empty (use raw cell before fallback)
-            product_raw = ""
-            if product_col is not None and product_col < len(row):
-                product_raw = str(row.iloc[product_col]).strip()
-
-            # Apply cleaning rules:
-            # 1. Drop if MemberName is empty or NaN-like
-            if not member_name_raw or member_name_raw.lower() in ["nan", "none", ""]:
-                continue
-
-            # 2. Drop if MemberNo contains 'branch' or 'total' (subtotal/header rows)
-            if member_no_raw and any(word in member_no_raw.lower() for word in ["branch", "total"]):
-                continue
-
-            # 3. Drop if Product Name is empty
-            if not product_raw or product_raw.lower() in ["nan", "none", ""]:
-                continue
-
-            # At this point we consider the row a valid loan account
-            record = {
-                'Branch': str(row['Branch']) if pd.notna(row['Branch']) else extract_branch_from_filename(filename),
-                'Loan_Officer': str(row['Loan_Officer']) if pd.notna(row['Loan_Officer']) else None,
-                'MemberName': member_name_raw,
-                'Report_Date': file_report_date,
-            }
-
-            # Extract arrears
-            if arrears_col is not None and arrears_col < len(row):
-                try:
-                    arrears_val = str(row.iloc[arrears_col]).replace(',', '').replace(' ', '')
-                    record['Arrears'] = float(arrears_val) if arrears_val else 0.0
-                except (ValueError, AttributeError):
-                    record['Arrears'] = 0.0
-            else:
-                record['Arrears'] = 0.0
-            
-            # Extract principle
-            if principle_col is not None and principle_col < len(row):
-                try:
-                    principle_val = str(row.iloc[principle_col]).replace(',', '').replace(' ', '')
-                    record['Principle'] = float(principle_val) if principle_val else None
-                except (ValueError, AttributeError):
-                    record['Principle'] = None
-            else:
-                record['Principle'] = None
-            
-            # Extract total balance
-            if total_balance_col is not None and total_balance_col < len(row):
-                try:
-                    balance_val = str(row.iloc[total_balance_col]).replace(',', '').replace(' ', '')
-                    record['TotalBalance'] = float(balance_val) if balance_val else None
-                except (ValueError, AttributeError):
-                    record['TotalBalance'] = None
-            else:
-                record['TotalBalance'] = None
-            
-            # Extract days
-            if days_col is not None and days_col < len(row):
-                try:
-                    days_val = str(row.iloc[days_col]).replace(',', '').replace(' ', '')
-                    record['Days'] = int(float(days_val)) if days_val else None
-                except (ValueError, AttributeError):
-                    record['Days'] = None
-            else:
-                record['Days'] = None
-            
-            # Extract product (we already know product_raw is non-empty)
-            if product_col is not None and product_col < len(row):
-                record['Product'] = product_raw
-            else:
-                # No product column detected – bucket under Unspecified so it can be reviewed/cleaned
-                record['Product'] = "Unspecified"
-            
-            # Extract account ID
-            if account_id_col is not None and account_id_col < len(row):
-                account_val = str(row.iloc[account_id_col]).strip()
-                record['AccountID'] = account_val if account_val and account_val.lower() not in ["none", "nan", ""] else None
-            else:
-                record['AccountID'] = None
-            
-            result_data.append(record)
-        
-        result_df = pd.DataFrame(result_data)
-        
-        # Fill missing Principle/TotalBalance with fallbacks
-        if 'Principle' in result_df.columns:
-            result_df['Principle'] = pd.to_numeric(result_df['Principle'], errors='coerce').fillna(result_df['Arrears'])
-        else:
-            result_df['Principle'] = result_df['Arrears']
-        
-        if 'TotalBalance' in result_df.columns:
-            result_df['TotalBalance'] = pd.to_numeric(result_df['TotalBalance'], errors='coerce').fillna(
-                result_df['Principle'] + result_df['Arrears']
-            )
-        else:
-            result_df['TotalBalance'] = result_df['Principle'] + result_df['Arrears']
-        
-        # Ensure numeric columns are properly typed
-        result_df['Arrears'] = pd.to_numeric(result_df['Arrears'], errors='coerce').fillna(0.0)
-        result_df['Principle'] = pd.to_numeric(result_df['Principle'], errors='coerce').fillna(0.0)
-        result_df['TotalBalance'] = pd.to_numeric(result_df['TotalBalance'], errors='coerce').fillna(0.0)
-        
-        return result_df
+        # Delegate processing to the core logic function
+        return _extract_records_from_df(df, filename, file_report_date)
         
     except Exception as e:
         print(f"Error loading {filename}: {e}")
@@ -394,136 +353,10 @@ def process_uploaded_file(uploaded_file, branch_name: Optional[str] = None) -> p
         # Override branch if provided
         if branch_name:
             df['Branch'] = branch_name.lower().strip()
-        
-        # Detect columns
-        arrears_col = detect_column_by_pattern(df, COLUMN_PATTERNS["arrears"], DEFAULT_COLUMNS["arrears"])
-        principle_col = detect_column_by_pattern(df, COLUMN_PATTERNS["principle"], DEFAULT_COLUMNS["principle"])
-        total_balance_col = detect_column_by_pattern(df, COLUMN_PATTERNS["total_balance"], DEFAULT_COLUMNS["total_balance"])
-        days_col = detect_column_by_pattern(df, COLUMN_PATTERNS["days"], DEFAULT_COLUMNS["days"])
-        product_col = detect_column_by_pattern(df, COLUMN_PATTERNS["product"], DEFAULT_COLUMNS["product"])
-        account_id_col = detect_column_by_pattern(df, COLUMN_PATTERNS["account_id"], DEFAULT_COLUMNS["account_id"])
-        member_name_col = detect_column_by_pattern(df, COLUMN_PATTERNS.get("member_name", []), DEFAULT_COLUMNS.get("member_name"))
-        
-        # Extract data rows
-        data_rows = []
-        for idx in range(len(df)):
-            row = df.iloc[idx]
-            if arrears_col is not None and arrears_col < len(row):
-                try:
-                    arrears_val = float(str(row.iloc[arrears_col]).replace(',', '').replace(' ', ''))
-                    if arrears_val > 0:
-                        data_rows.append(idx)
-                except (ValueError, AttributeError):
-                    continue
-        
-        if not data_rows:
-            return pd.DataFrame()
-        
-        # Build result dataframe
-        result_data = []
-        for idx in data_rows:
-            row = df.iloc[idx]
-            
-            # Validate and extract
-            member_no_raw = ""
-            if account_id_col is not None and account_id_col < len(row):
-                member_no_raw = str(row.iloc[account_id_col]).strip()
-            
-            member_name_raw = ""
-            if member_name_col is not None and member_name_col < len(row):
-                member_name_raw = str(row.iloc[member_name_col]).strip()
-            
-            product_raw = ""
-            if product_col is not None and product_col < len(row):
-                product_raw = str(row.iloc[product_col]).strip()
-            
-            # Apply cleaning rules
-            if not member_name_raw or member_name_raw.lower() in ["nan", "none", ""]:
-                continue
-            
-            if member_no_raw and any(word in member_no_raw.lower() for word in ["branch", "total"]):
-                continue
-            
-            if not product_raw or product_raw.lower() in ["nan", "none", ""]:
-                continue
-            
-            # Build record
-            record = {
-                'Branch': str(row['Branch']).lower().strip() if pd.notna(row['Branch']) else extract_branch_from_filename(uploaded_file.name),
-                'Loan_Officer': str(row['Loan_Officer']).lower().strip() if pd.notna(row['Loan_Officer']) else None,
-                'MemberName': member_name_raw,
-                'Report_Date': datetime.now().date(),  # Use current date for uploaded files
-            }
-            
-            # Extract values
-            if arrears_col is not None and arrears_col < len(row):
-                try:
-                    arrears_val = str(row.iloc[arrears_col]).replace(',', '').replace(' ', '')
-                    record['Arrears'] = float(arrears_val) if arrears_val else 0.0
-                except (ValueError, AttributeError):
-                    record['Arrears'] = 0.0
-            else:
-                record['Arrears'] = 0.0
-            
-            # Extract other fields
-            if principle_col is not None and principle_col < len(row):
-                try:
-                    principle_val = str(row.iloc[principle_col]).replace(',', '').replace(' ', '')
-                    record['Principle'] = float(principle_val) if principle_val else None
-                except (ValueError, AttributeError):
-                    record['Principle'] = None
-            else:
-                record['Principle'] = None
-            
-            if total_balance_col is not None and total_balance_col < len(row):
-                try:
-                    balance_val = str(row.iloc[total_balance_col]).replace(',', '').replace(' ', '')
-                    record['TotalBalance'] = float(balance_val) if balance_val else None
-                except (ValueError, AttributeError):
-                    record['TotalBalance'] = None
-            else:
-                record['TotalBalance'] = None
-            
-            if days_col is not None and days_col < len(row):
-                try:
-                    days_val = str(row.iloc[days_col]).replace(',', '').replace(' ', '')
-                    record['Days'] = int(float(days_val)) if days_val else None
-                except (ValueError, AttributeError):
-                    record['Days'] = None
-            else:
-                record['Days'] = None
-            
-            record['Product'] = product_raw if product_raw else "Unspecified"
-            
-            if account_id_col is not None and account_id_col < len(row):
-                account_val = str(row.iloc[account_id_col]).strip()
-                record['AccountID'] = account_val if account_val and account_val.lower() not in ["none", "nan", ""] else None
-            else:
-                record['AccountID'] = None
-            
-            result_data.append(record)
-        
-        result_df = pd.DataFrame(result_data)
-        
-        # Fill missing values
-        if 'Principle' in result_df.columns:
-            result_df['Principle'] = pd.to_numeric(result_df['Principle'], errors='coerce').fillna(result_df['Arrears'])
-        else:
-            result_df['Principle'] = result_df['Arrears']
-        
-        if 'TotalBalance' in result_df.columns:
-            result_df['TotalBalance'] = pd.to_numeric(result_df['TotalBalance'], errors='coerce').fillna(
-                result_df['Principle'] + result_df['Arrears']
-            )
-        else:
-            result_df['TotalBalance'] = result_df['Principle'] + result_df['Arrears']
-        
-        # Ensure numeric columns
-        result_df['Arrears'] = pd.to_numeric(result_df['Arrears'], errors='coerce').fillna(0.0)
-        result_df['Principle'] = pd.to_numeric(result_df['Principle'], errors='coerce').fillna(0.0)
-        result_df['TotalBalance'] = pd.to_numeric(result_df['TotalBalance'], errors='coerce').fillna(0.0)
-        
-        return result_df
+
+        # Delegate to the core processing function
+        # For uploaded files, we assume the report date is today
+        return _extract_records_from_df(df, uploaded_file.name, datetime.now().date())
         
     except Exception as e:
         print(f"Error processing uploaded file: {e}")
