@@ -38,6 +38,8 @@ from src.constants import (
     PRIORITY_ACTIONS,
     CURRENCY_SYMBOL,
     CHART_CONFIG,
+    DATA_FOLDER,
+    ADMIN_PASSWORD,
 )
 
 # Page configuration
@@ -270,44 +272,65 @@ def main():
         st.sidebar.success(st.session_state.upload_success)
         del st.session_state['upload_success']
     
-    ADMIN_PASSWORD = "AdminUpdater"
     password_input = st.sidebar.text_input("Enter Admin Password", type="password")
     
     if password_input == ADMIN_PASSWORD:
-        uploaded_file = st.sidebar.file_uploader(
-            "Upload & Save Daily Report",
+        uploaded_files = st.sidebar.file_uploader(
+            "Upload & Save Daily Reports",
             type=['csv', 'xlsx'],
-            help="Upload a new report to permanently save it to the system's data folder."
+            accept_multiple_files=True,
+            help="Upload new reports to permanently save them to the system's data folder."
         )
 
-        if uploaded_file is not None:
-            destination_path = os.path.join("data", uploaded_file.name)
+        if uploaded_files:
+            # Check for existing files
+            existing_files = [f.name for f in uploaded_files if os.path.exists(os.path.join(DATA_FOLDER, f.name))]
             overwrite = False
             
-            st.sidebar.write(f"**File:** `{uploaded_file.name}`")
+            st.sidebar.write(f"**Selected:** {len(uploaded_files)} files")
 
-            if os.path.exists(destination_path):
-                st.sidebar.warning("⚠️ A file with this name already exists.")
-                overwrite = st.sidebar.checkbox("Overwrite the existing file?")
+            if existing_files:
+                st.sidebar.warning(f"⚠️ {len(existing_files)} file(s) already exist.")
+                overwrite = st.sidebar.checkbox("Overwrite existing files?")
 
-            if st.sidebar.button("💾 Save File to System"):
-                if os.path.exists(destination_path) and not overwrite:
-                    st.sidebar.error("Overwrite not selected. File not saved.")
-                else:
+            if st.sidebar.button("💾 Save Files to System"):
+                saved_count = 0
+                skipped_count = 0
+                errors = []
+                
+                for uploaded_file in uploaded_files:
+                    destination_path = os.path.join(DATA_FOLDER, uploaded_file.name)
+                    
+                    if os.path.exists(destination_path) and not overwrite:
+                        skipped_count += 1
+                        continue
+
                     try:
                         with open(destination_path, "wb") as f:
                             f.write(uploaded_file.getvalue())
-                        
-                        # Set success message for next run
-                        st.session_state.upload_success = "✅ File saved successfully!"
-                        st.toast("Reloading all data...")
-                        
-                        # Clear cache and rerun to reflect the new data
-                        st.cache_data.clear()
-                        st.rerun()
-
+                        saved_count += 1
                     except Exception as e:
-                        st.sidebar.error(f"Failed to save file: {e}")
+                        errors.append(f"{uploaded_file.name}: {e}")
+                
+                if saved_count > 0:
+                    msg = f"✅ Saved {saved_count} files successfully!"
+                    if skipped_count > 0:
+                        msg += f" (Skipped {skipped_count})"
+                    
+                    # Set success message for next run
+                    st.session_state.upload_success = msg
+                    st.toast("Reloading all data...")
+                    
+                    # Clear cache and rerun to reflect the new data
+                    st.cache_data.clear()
+                    st.rerun()
+                
+                elif skipped_count > 0:
+                    st.sidebar.warning(f"Skipped {skipped_count} files (Overwrite not selected).")
+                
+                if errors:
+                    for err in errors:
+                        st.sidebar.error(err)
     elif password_input:
         st.sidebar.error("Incorrect Password")
 

@@ -4,10 +4,8 @@ Constants and configuration for Spread Capital Arrears Analysis System
 
 import os
 
-# Data Paths - Use relative path for GitHub/Streamlit Cloud compatibility
-# Get root directory (parent of src/) and join with data folder
-_root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_FOLDER = os.path.join(_root_dir, "data")
+# Data Paths
+DATA_FOLDER = r"c:\Users\chris\Documents\Christopher's Arrears Analysis System\data"
 
 # Spread Capital Brand Colors
 COLORS = {
@@ -79,3 +77,6 @@ CHART_CONFIG = {
     "moderate_color": COLORS["accent_amber"],
     "early_warning_color": COLORS["accent_yellow"],
 }
+
+# Security
+ADMIN_PASSWORD = "AdminUpdater"
