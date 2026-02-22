@@ -58,7 +58,7 @@ st.markdown("""
     
     /* Sidebar Headers and Labels - White & Calibri */
     [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3, 
-    [data-testid="stSidebar"] label, [data-testid="stSidebar"] span, [data-testid="stSidebar"] p, [data-testid="stSidebar"] strong {
+    [data-testid="stSidebar"] label, [data-testid="stSidebar"] p, [data-testid="stSidebar"] strong {
         color: #FFFFFF !important;
         font-family: 'Calibri', sans-serif !important;
     }
@@ -76,10 +76,12 @@ st.markdown("""
     
     /* Fix Uploaded File Info (Filename, Size) & Icons in Sidebar */
     [data-testid="stSidebar"] [data-testid="stFileUploader"] div,
-    [data-testid="stSidebar"] [data-testid="stFileUploader"] span,
-    [data-testid="stSidebar"] [data-testid="stFileUploader"] small,
-    [data-testid="stSidebar"] [data-testid="stFileUploader"] svg {
+    [data-testid="stSidebar"] [data-testid="stFileUploader"] span, /* Covers prompt text and file names */
+    [data-testid="stSidebar"] [data-testid="stFileUploader"] small { /* Covers file size limit text */
         color: #FFFFFF !important;
+        font-family: 'Calibri', sans-serif !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stFileUploader"] svg {
         fill: #FFFFFF !important;
     }
     
