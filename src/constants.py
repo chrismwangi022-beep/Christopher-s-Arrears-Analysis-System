@@ -5,7 +5,7 @@ Constants and configuration for Spread Capital Arrears Analysis System
 import os
 
 # Data Paths
-DATA_FOLDER = r"c:\Users\chris\Documents\Christopher's Arrears Analysis System\data"
+DATA_FOLDER = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
 
 # Spread Capital Brand Colors
 COLORS = {
