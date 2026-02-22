@@ -63,6 +63,17 @@ st.markdown("""
         font-family: 'Calibri', sans-serif !important;
     }
     
+    /* Fix File Uploader Background & Text in Sidebar */
+    [data-testid="stSidebar"] [data-testid="stFileUploader"] section {
+        background-color: #1E2A5E !important;
+        border: 1px dashed #FFFFFF !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stFileUploader"] button {
+        background-color: #2A3A6E !important;
+        color: #FFFFFF !important;
+        border: 1px solid #FFFFFF !important;
+    }
+    
     /* KPI Cards */
     .kpi-card {
         background: linear-gradient(135deg, #1E2A5E 0%, #2A3A6E 100%);
