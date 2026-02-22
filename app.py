@@ -52,14 +52,15 @@ st.set_page_config(
 st.markdown("""
 <style>
     /* Sidebar styling */
-    .css-1d391kg {
-        background-color: #1E2A5E;
-    }
     [data-testid="stSidebar"] {
         background-color: #1E2A5E;
     }
-    [data-testid="stSidebar"] .css-1d391kg {
-        background-color: #1E2A5E;
+    
+    /* Sidebar Headers and Labels - White & Calibri */
+    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3, 
+    [data-testid="stSidebar"] label, [data-testid="stSidebar"] span, [data-testid="stSidebar"] p {
+        color: #FFFFFF !important;
+        font-family: 'Calibri', sans-serif !important;
     }
     
     /* KPI Cards */
@@ -154,44 +155,6 @@ def main():
     )
     st.sidebar.markdown("---")
 
-    st.sidebar.title("Data Management")
-    
-    uploaded_file = st.sidebar.file_uploader(
-        "Upload & Save Daily Report",
-        type=['csv', 'xlsx'],
-        help="Upload a new report to permanently save it to the system's data folder."
-    )
-
-    if uploaded_file is not None:
-        destination_path = os.path.join("data", uploaded_file.name)
-        overwrite = False
-        
-        st.sidebar.write(f"**File:** `{uploaded_file.name}`")
-
-        if os.path.exists(destination_path):
-            st.sidebar.warning("⚠️ A file with this name already exists.")
-            overwrite = st.sidebar.checkbox("Overwrite the existing file?")
-
-        if st.sidebar.button("💾 Save File to System"):
-            if os.path.exists(destination_path) and not overwrite:
-                st.sidebar.error("Overwrite not selected. File not saved.")
-            else:
-                try:
-                    with open(destination_path, "wb") as f:
-                        f.write(uploaded_file.getvalue())
-                    
-                    st.sidebar.success("✅ File saved successfully!")
-                    st.toast("Reloading all data...")
-                    
-                    # Clear cache and rerun to reflect the new data
-                    st.cache_data.clear()
-                    st.rerun()
-
-                except Exception as e:
-                    st.sidebar.error(f"Failed to save file: {e}")
-
-    st.sidebar.markdown("---")
-    
     # Timeline -> Calendar: strict single-date filter using Report_Date
     st.sidebar.subheader("Report Date")
     df_filtered = df.copy()
@@ -251,6 +214,43 @@ def main():
     st.sidebar.markdown("---")
     st.sidebar.metric("Records", len(df_display))
     
+    st.sidebar.markdown("---")
+    st.sidebar.title("Data Management")
+    
+    uploaded_file = st.sidebar.file_uploader(
+        "Upload & Save Daily Report",
+        type=['csv', 'xlsx'],
+        help="Upload a new report to permanently save it to the system's data folder."
+    )
+
+    if uploaded_file is not None:
+        destination_path = os.path.join("data", uploaded_file.name)
+        overwrite = False
+        
+        st.sidebar.write(f"**File:** `{uploaded_file.name}`")
+
+        if os.path.exists(destination_path):
+            st.sidebar.warning("⚠️ A file with this name already exists.")
+            overwrite = st.sidebar.checkbox("Overwrite the existing file?")
+
+        if st.sidebar.button("💾 Save File to System"):
+            if os.path.exists(destination_path) and not overwrite:
+                st.sidebar.error("Overwrite not selected. File not saved.")
+            else:
+                try:
+                    with open(destination_path, "wb") as f:
+                        f.write(uploaded_file.getvalue())
+                    
+                    st.sidebar.success("✅ File saved successfully!")
+                    st.toast("Reloading all data...")
+                    
+                    # Clear cache and rerun to reflect the new data
+                    st.cache_data.clear()
+                    st.rerun()
+
+                except Exception as e:
+                    st.sidebar.error(f"Failed to save file: {e}")
+
     if df_display.empty:
         st.warning("No data matches the selected filters.")
         return
