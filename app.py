@@ -399,8 +399,9 @@ def main():
                 xaxis_title="Branch",
                 yaxis_title="Arrears Amount",
                 height=400,
+                dragmode='pan',
             )
-            st.plotly_chart(fig_branch, use_container_width=True)
+            st.plotly_chart(fig_branch, use_container_width=True, config={'scrollZoom': False})
     
     with col_chart2:
         # Arrears by Product - Pie chart (JENGA vs DUMISHA vs others)
@@ -418,7 +419,8 @@ def main():
                 textinfo="percent+label+value",
                 hovertemplate="%{label}<br>Arrears: " + CURRENCY_SYMBOL + " %{value:,.0f}<extra></extra>",
             )
-            st.plotly_chart(fig_product, use_container_width=True)
+            fig_product.update_layout(dragmode='pan')
+            st.plotly_chart(fig_product, use_container_width=True, config={'scrollZoom': False})
 
     
     
@@ -452,8 +454,9 @@ def main():
             xaxis_title="Aging Bucket",
             yaxis_title="Arrears Amount",
             height=400,
+            dragmode='pan',
         )
-        st.plotly_chart(fig_aging, use_container_width=True)
+        st.plotly_chart(fig_aging, use_container_width=True, config={'scrollZoom': False})
     
     st.markdown("---")
     
@@ -643,7 +646,8 @@ def main():
             }
         )
         fig_pie.update_traces(textposition='inside', textinfo='percent+label+value')
-        st.plotly_chart(fig_pie, use_container_width=True)
+        fig_pie.update_layout(dragmode='pan')
+        st.plotly_chart(fig_pie, use_container_width=True, config={'scrollZoom': False})
 
     # --- REFACTOR: Consolidated Trend Analysis Section ---
     st.markdown("---")
@@ -690,8 +694,8 @@ def main():
                     color_discrete_sequence=palette,
                 )
                 fig_daily.update_traces(hovertemplate=f"%{{x}}<br>Arrears: {CURRENCY_SYMBOL} %{{y:,.0f}}<extra></extra>")
-                fig_daily.update_layout(height=450, template='plotly_dark', title=f'Arrears Movement Over Time by {group_choice}')
-                st.plotly_chart(fig_daily, use_container_width=True)
+                fig_daily.update_layout(height=450, template='plotly_dark', title=f'Arrears Movement Over Time by {group_choice}', dragmode='pan')
+                st.plotly_chart(fig_daily, use_container_width=True, config={'scrollZoom': False})
             except Exception as e:
                 st.error(f"Error plotting trend analysis: {e}")
         else:
