@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 import sys
 import os
 import io
+import git
 
 # Add src to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -297,6 +298,7 @@ def main():
                 saved_count = 0
                 skipped_count = 0
                 errors = []
+                saved_file_paths = []
                 
                 for uploaded_file in uploaded_files:
                     destination_path = os.path.join(DATA_FOLDER, uploaded_file.name)
@@ -309,19 +311,46 @@ def main():
                         with open(destination_path, "wb") as f:
                             f.write(uploaded_file.getvalue())
                         saved_count += 1
+                        saved_file_paths.append(destination_path)
                     except Exception as e:
                         errors.append(f"{uploaded_file.name}: {e}")
                 
                 if saved_count > 0:
-                    msg = f"✅ Saved {saved_count} files successfully!"
-                    if skipped_count > 0:
-                        msg += f" (Skipped {skipped_count})"
-                    
-                    # Set success message for next run
-                    st.session_state.upload_success = msg
+                    # --- GIT PUSH LOGIC ---
+                    git_success_message = None
+                    git_error_message = None
+                    try:
+                        github_token = st.secrets.get("GITHUB_TOKEN")
+                        if not github_token:
+                            git_error_message = "🚫 GitHub token not found in st.secrets. Cannot push updates."
+                        else:
+                            repo_path = os.path.dirname(os.path.abspath(__file__))
+                            repo = git.Repo(repo_path)
+                            
+                            repo.index.add(saved_file_paths)
+                            
+                            if repo.is_dirty(working_tree=False): # Check for staged changes
+                                repo.index.commit("Daily Data Update")
+                                origin = repo.remote(name='origin')
+                                repo_url = origin.url
+                                
+                                if repo_url.startswith("https://"):
+                                    authed_url = repo_url.replace("https://", f"https://{github_token}@")
+                                    repo.git.push(authed_url, repo.active_branch.name)
+                                    git_success_message = "✅ Data pushed to GitHub successfully!"
+                                else:
+                                    git_error_message = "Git push only supported for HTTPS remotes."
+                            else:
+                                git_success_message = "No new file changes to push to GitHub."
+                    except Exception as e:
+                        git_error_message = f"🔥 Failed to push to GitHub: {e}"
+
+                    # Combine messages and rerun
+                    local_save_msg = f"✅ Saved {saved_count} files locally."
+                    git_msg = git_success_message or git_error_message
+                    final_msg = f"{local_save_msg} | {git_msg}" if git_msg else local_save_msg
+                    st.session_state.upload_success = final_msg
                     st.toast("Reloading all data...")
-                    
-                    # Clear cache and rerun to reflect the new data
                     st.cache_data.clear()
                     st.rerun()
                 
