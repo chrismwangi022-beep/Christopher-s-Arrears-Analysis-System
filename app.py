@@ -295,6 +295,10 @@ def main():
                 overwrite = st.sidebar.checkbox("Overwrite existing files?")
 
             if st.sidebar.button("💾 Save Files to System"):
+                # Ensure data folder exists
+                if not os.path.exists(DATA_FOLDER):
+                    os.makedirs(DATA_FOLDER)
+
                 saved_count = 0
                 skipped_count = 0
                 errors = []
