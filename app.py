@@ -325,6 +325,10 @@ def main():
                     try:
                         # 1. Get the token from secrets
                         token = st.secrets["GITHUB_TOKEN"]
+                        
+                        # Set environment to disable interactive prompts (fixes "No such device" error)
+                        os.environ['GIT_TERMINAL_PROMPT'] = '0'
+                        
                         repo_url = "github.com/chrismwangi022-beep/Christopher-s-Arrears-Analysis-System.git"
 
                         # 2. Build the Authenticated URL correctly
@@ -344,15 +348,10 @@ def main():
                             # Commit changes
                             repo.index.commit("Daily Data Update")
 
-                            # 3. Update the remote to use the token
-                            if 'origin' in [remote.name for remote in repo.remotes]:
-                                origin = repo.remote('origin')
-                                origin.set_url(authenticated_url)
-                            else:
-                                origin = repo.create_remote('origin', authenticated_url)
-
-                            # 4. Push with the authenticated remote
-                            origin.push(refspec='main:main')
+                            # 3. Push directly using the authenticated URL
+                            # This avoids modifying the local .git/config with the secret token
+                            repo.git.push(authenticated_url, "HEAD:main")
+                            
                             git_success_message = "🚀 GitHub Synchronized Successfully!"
                         else:
                             git_success_message = "No new file changes to push to GitHub."
