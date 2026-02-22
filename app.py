@@ -74,6 +74,15 @@ st.markdown("""
         border: 1px solid #FFFFFF !important;
     }
     
+    /* Fix Uploaded File Info (Filename, Size) & Icons in Sidebar */
+    [data-testid="stSidebar"] [data-testid="stFileUploader"] div,
+    [data-testid="stSidebar"] [data-testid="stFileUploader"] span,
+    [data-testid="stSidebar"] [data-testid="stFileUploader"] small,
+    [data-testid="stSidebar"] [data-testid="stFileUploader"] svg {
+        color: #FFFFFF !important;
+        fill: #FFFFFF !important;
+    }
+    
     /* Fix Standard Buttons in Sidebar (e.g. Save button) */
     [data-testid="stSidebar"] .stButton button {
         background-color: #2A3A6E !important;
@@ -242,6 +251,11 @@ def main():
     st.sidebar.markdown("---")
     st.sidebar.title("Data Management")
     
+    # Display success message if file was saved in previous run
+    if 'upload_success' in st.session_state:
+        st.sidebar.success(st.session_state.upload_success)
+        del st.session_state['upload_success']
+    
     uploaded_file = st.sidebar.file_uploader(
         "Upload & Save Daily Report",
         type=['csv', 'xlsx'],
@@ -266,7 +280,8 @@ def main():
                     with open(destination_path, "wb") as f:
                         f.write(uploaded_file.getvalue())
                     
-                    st.sidebar.success("✅ File saved successfully!")
+                    # Set success message for next run
+                    st.session_state.upload_success = "✅ File saved successfully!"
                     st.toast("Reloading all data...")
                     
                     # Clear cache and rerun to reflect the new data
