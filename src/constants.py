@@ -2,10 +2,10 @@
 Constants and configuration for Spread Capital Arrears Analysis System
 """
 
-import os
+from pathlib import Path
 
 # Data Paths
-DATA_FOLDER = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
+DATA_FOLDER = Path(__file__).parents[1] / 'data'
 
 # Spread Capital Brand Colors
 COLORS = {

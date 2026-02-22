@@ -334,16 +334,18 @@ def main():
                             repo.index.add(saved_file_paths)
                             
                             if repo.is_dirty(working_tree=False): # Check for staged changes
-                                repo.index.commit("Daily Data Update")
-                                origin = repo.remote(name='origin')
-                                repo_url = origin.url
+                                # Configure git actor for headless commit
+                                with repo.config_writer() as git_config:
+                                    git_config.set_value("user", "name", "Streamlit App Bot")
+                                    git_config.set_value("user", "email", "bot@streamlit.app")
                                 
-                                if repo_url.startswith("https://"):
-                                    authed_url = repo_url.replace("https://", f"https://{github_token}@")
-                                    repo.git.push(authed_url, repo.active_branch.name)
-                                    git_success_message = "✅ Data pushed to GitHub successfully!"
-                                else:
-                                    git_error_message = "Git push only supported for HTTPS remotes."
+                                # Commit changes
+                                repo.index.commit("Daily Data Update")
+                                
+                                # Push to remote using token authentication
+                                remote_url = f'https://{github_token}@github.com/chrismwangi022-beep/Christopher-s-Arrears-Analysis-System.git'
+                                repo.git.push(remote_url, repo.active_branch.name)
+                                git_success_message = "✅ Data pushed to GitHub successfully!"
                             else:
                                 git_success_message = "No new file changes to push to GitHub."
                     except Exception as e:
