@@ -77,6 +77,3 @@ CHART_CONFIG = {
     "moderate_color": COLORS["accent_amber"],
     "early_warning_color": COLORS["accent_yellow"],
 }
-
-# Security
-ADMIN_PASSWORD = "AdminUpdater"

@@ -40,7 +40,6 @@ from src.constants import (
     CURRENCY_SYMBOL,
     CHART_CONFIG,
     DATA_FOLDER,
-    ADMIN_PASSWORD,
 )
 
 # Page configuration
@@ -275,7 +274,7 @@ def main():
     
     password_input = st.sidebar.text_input("Enter Admin Password", type="password")
     
-    if password_input == ADMIN_PASSWORD:
+    if password_input == st.secrets["ADMIN_PASSWORD"]:
         uploaded_files = st.sidebar.file_uploader(
             "Upload & Save Daily Reports",
             type=['csv', 'xlsx'],
@@ -344,10 +343,6 @@ def main():
                                 
                                 # Push to remote using token authentication
                                 remote_url = f'https://{github_token}@github.com/chrismwangi022-beep/Christopher-s-Arrears-Analysis-System.git'
-                                # Push to 'data-updates' branch to bypass 'main' branch protection
-                                # Using force=True to ensure the data backup always succeeds
-                                repo.git.push(remote_url, "HEAD:refs/heads/data-updates", force=True)
-                                git_success_message = "✅ Data pushed to GitHub branch 'data-updates' successfully!"
                                 # Push to 'data-updates' branch to bypass 'main' branch protection
                                 # Using force=True to ensure the data backup always succeeds
                                 repo.git.push(remote_url, "HEAD:refs/heads/data-updates", force=True)
