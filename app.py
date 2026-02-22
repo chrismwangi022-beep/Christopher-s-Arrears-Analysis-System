@@ -323,34 +323,41 @@ def main():
                     git_success_message = None
                     git_error_message = None
                     try:
-                        github_token = st.secrets.get("GITHUB_TOKEN")
-                        if not github_token:
-                            git_error_message = "🚫 GitHub token not found in st.secrets. Cannot push updates."
-                        else:
-                            repo_path = os.path.dirname(os.path.abspath(__file__))
-                            repo = git.Repo(repo_path)
+                        # 1. Get the token from secrets
+                        token = st.secrets["GITHUB_TOKEN"]
+                        repo_url = "github.com/chrismwangi022-beep/Christopher-s-Arrears-Analysis-System.git"
+
+                        # 2. Build the Authenticated URL correctly
+                        authenticated_url = f"https://{token}@{repo_url}"
+
+                        repo_path = os.path.dirname(os.path.abspath(__file__))
+                        repo = git.Repo(repo_path)
+                        
+                        repo.index.add(saved_file_paths)
+                        
+                        if repo.is_dirty(working_tree=False): # Check for staged changes
+                            # Configure git actor for headless commit
+                            with repo.config_writer() as git_config:
+                                git_config.set_value("user", "name", "Streamlit App Bot")
+                                git_config.set_value("user", "email", "bot@streamlit.app")
                             
-                            repo.index.add(saved_file_paths)
-                            
-                            if repo.is_dirty(working_tree=False): # Check for staged changes
-                                # Configure git actor for headless commit
-                                with repo.config_writer() as git_config:
-                                    git_config.set_value("user", "name", "Streamlit App Bot")
-                                    git_config.set_value("user", "email", "bot@streamlit.app")
-                                
-                                # Commit changes
-                                repo.index.commit("Daily Data Update")
-                                
-                                # Push to remote using token authentication
-                                remote_url = f'https://{github_token}@github.com/chrismwangi022-beep/Christopher-s-Arrears-Analysis-System.git'
-                                # Push to 'data-updates' branch to bypass 'main' branch protection
-                                # Using force=True to ensure the data backup always succeeds
-                                repo.git.push(remote_url, "HEAD:refs/heads/data-updates", force=True)
-                                git_success_message = "✅ Data pushed to GitHub branch 'data-updates' successfully!"
+                            # Commit changes
+                            repo.index.commit("Daily Data Update")
+
+                            # 3. Update the remote to use the token
+                            if 'origin' in [remote.name for remote in repo.remotes]:
+                                origin = repo.remote('origin')
+                                origin.set_url(authenticated_url)
                             else:
-                                git_success_message = "No new file changes to push to GitHub."
+                                origin = repo.create_remote('origin', authenticated_url)
+
+                            # 4. Push with the authenticated remote
+                            origin.push(refspec='main:main')
+                            git_success_message = "🚀 GitHub Synchronized Successfully!"
+                        else:
+                            git_success_message = "No new file changes to push to GitHub."
                     except Exception as e:
-                        git_error_message = f"🔥 Failed to push to GitHub: {e}"
+                        git_error_message = f"🔥 Git Error: {str(e)}"
 
                     # Combine messages and rerun
                     local_save_msg = f"✅ Saved {saved_count} files locally."
