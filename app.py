@@ -58,7 +58,7 @@ st.markdown("""
     
     /* Sidebar Headers and Labels - White & Calibri */
     [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3, 
-    [data-testid="stSidebar"] label, [data-testid="stSidebar"] span, [data-testid="stSidebar"] p {
+    [data-testid="stSidebar"] label, [data-testid="stSidebar"] span, [data-testid="stSidebar"] p, [data-testid="stSidebar"] strong {
         color: #FFFFFF !important;
         font-family: 'Calibri', sans-serif !important;
     }
@@ -69,6 +69,20 @@ st.markdown("""
         border: 1px dashed #FFFFFF !important;
     }
     [data-testid="stSidebar"] [data-testid="stFileUploader"] button {
+        background-color: #2A3A6E !important;
+        color: #FFFFFF !important;
+        border: 1px solid #FFFFFF !important;
+    }
+    
+    /* Fix Standard Buttons in Sidebar (e.g. Save button) */
+    [data-testid="stSidebar"] .stButton button {
+        background-color: #2A3A6E !important;
+        color: #FFFFFF !important;
+        border: 1px solid #FFFFFF !important;
+    }
+    
+    /* Fix Alerts (Warning, Success, Error) in Sidebar */
+    [data-testid="stSidebar"] [data-testid="stAlert"] {
         background-color: #2A3A6E !important;
         color: #FFFFFF !important;
         border: 1px solid #FFFFFF !important;
