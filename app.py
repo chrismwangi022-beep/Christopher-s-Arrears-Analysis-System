@@ -322,46 +322,42 @@ def main():
                     # --- GIT PUSH LOGIC ---
                     git_success_message = None
                     git_error_message = None
-                    try:
-                        # 1. Get the token from secrets
-                        token = st.secrets["GITHUB_TOKEN"].strip()
-                        
-                        # Set environment to disable interactive prompts (fixes "No such device" error)
-                        os.environ['GIT_TERMINAL_PROMPT'] = '0'
-                        
-                        repo_url = "github.com/chrismwangi022-beep/Christopher-s-Arrears-Analysis-System.git"
 
-                        # 2. Build the Authenticated URL correctly
-                        # Use token as username and x-oauth-basic as password for robustness
-                        authenticated_url = f"https://{token}:x-oauth-basic@{repo_url}"
+                    # 1. Securely fetch the token
+                    token = st.secrets.get("GITHUB_TOKEN")
 
-                        repo_path = os.path.dirname(os.path.abspath(__file__))
-                        repo = git.Repo(repo_path)
-                        
-                        repo.index.add(saved_file_paths)
-                        
-                        if repo.is_dirty(working_tree=False): # Check for staged changes
-                            # Configure git actor for headless commit
-                            with repo.config_writer() as git_config:
-                                git_config.set_value("user", "name", "Streamlit App Bot")
-                                git_config.set_value("user", "email", "bot@streamlit.app")
-                            
-                            # Commit changes
-                            repo.index.commit("Daily Data Update")
+                    if not token:
+                        git_error_message = "❌ GITHUB_TOKEN not found in Streamlit Secrets."
+                    else:
+                        try:
+                            # Use the current working directory as the repo path
+                            repo_path = os.path.dirname(os.path.abspath(__file__))
+                            repo = git.Repo(repo_path)
 
-                            # 3. Push directly using the authenticated URL
-                            # This avoids modifying the local .git/config with the secret token
-                            repo.git.push(authenticated_url, "HEAD:main")
-                            
-                            git_success_message = "🚀 GitHub Synchronized Successfully!"
-                        else:
-                            git_success_message = "No new file changes to push to GitHub."
-                    except Exception as e:
-                        error_str = str(e)
-                        if "128" in error_str and "could not read Password" in error_str:
-                            git_error_message = "🔥 Git Auth Failed: Token rejected. Check GITHUB_TOKEN permissions."
-                        else:
-                            git_error_message = f"🔥 Git Error: {error_str}"
+                            # 2. Build the authenticated URL
+                            repo_url = "github.com/chrismwangi022-beep/Christopher-s-Arrears-Analysis-System.git"
+                            remote_url = f"https://{token.strip()}@{repo_url}"
+
+                            # 3. Add and Commit files
+                            repo.index.add(["data/"])  # Adds all files in the data folder
+                            repo.index.commit("Daily Arrears Update via Web Portal")
+
+                            # 4. Push to main
+                            origin = repo.remote(name='origin')
+                            origin.set_url(remote_url)
+
+                            # Push to ensure the cloud version stays in sync
+                            origin.push(refspec='HEAD:main')
+
+                            git_success_message = "🚀 GitHub Repository Updated Successfully!"
+
+                        except git.exc.GitCommandError as e:
+                            if "nothing to commit" in str(e):
+                                git_success_message = "No new file changes to push to GitHub."
+                            else:
+                                git_error_message = f"🔥 Git Error: {str(e)}"
+                        except Exception as e:
+                            git_error_message = f"🔥 Git Error: {str(e)}"
 
                     # Combine messages and rerun
                     local_save_msg = f"✅ Saved {saved_count} files locally."

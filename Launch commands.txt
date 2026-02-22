@@ -33,3 +33,6 @@ streamlit run app.py
 
 
 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
+
+
+REPO_URL = "https://github.com/chrismwangi022-beep/Christopher-s-Arrears-Analysis-System"
