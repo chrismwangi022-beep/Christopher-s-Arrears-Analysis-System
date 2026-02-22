@@ -63,6 +63,30 @@ st.markdown("""
         font-family: 'Calibri', sans-serif !important;
     }
     
+    /* Sidebar Toggle Icon (Expanded - Left Arrow) -> White */
+    [data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] svg {
+        fill: #FFFFFF !important;
+        color: #FFFFFF !important;
+    }
+    
+    /* Sidebar Toggle Icon (Collapsed - Right Arrow) -> Black */
+    [data-testid="stSidebarCollapsedControl"] svg {
+        fill: #000000 !important;
+        color: #000000 !important;
+    }
+    
+    /* Sidebar Toggle Icon (Expanded - Left Arrow) -> White */
+    [data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] svg {
+        fill: #FFFFFF !important;
+        color: #FFFFFF !important;
+    }
+    
+    /* Sidebar Toggle Icon (Collapsed - Right Arrow) -> Black */
+    [data-testid="stSidebarCollapsedControl"] svg {
+        fill: #000000 !important;
+        color: #000000 !important;
+    }
+    
     /* Fix File Uploader Background & Text in Sidebar */
     [data-testid="stSidebar"] [data-testid="stFileUploader"] section {
         background-color: #1E2A5E !important;
