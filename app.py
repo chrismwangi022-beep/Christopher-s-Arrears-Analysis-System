@@ -324,7 +324,7 @@ def main():
                     git_error_message = None
                     try:
                         # 1. Get the token from secrets
-                        token = st.secrets["GITHUB_TOKEN"]
+                        token = st.secrets["GITHUB_TOKEN"].strip()
                         
                         # Set environment to disable interactive prompts (fixes "No such device" error)
                         os.environ['GIT_TERMINAL_PROMPT'] = '0'
@@ -332,7 +332,8 @@ def main():
                         repo_url = "github.com/chrismwangi022-beep/Christopher-s-Arrears-Analysis-System.git"
 
                         # 2. Build the Authenticated URL correctly
-                        authenticated_url = f"https://{token}@{repo_url}"
+                        # Use token as username and x-oauth-basic as password for robustness
+                        authenticated_url = f"https://{token}:x-oauth-basic@{repo_url}"
 
                         repo_path = os.path.dirname(os.path.abspath(__file__))
                         repo = git.Repo(repo_path)
@@ -356,7 +357,11 @@ def main():
                         else:
                             git_success_message = "No new file changes to push to GitHub."
                     except Exception as e:
-                        git_error_message = f"🔥 Git Error: {str(e)}"
+                        error_str = str(e)
+                        if "128" in error_str and "could not read Password" in error_str:
+                            git_error_message = "🔥 Git Auth Failed: Token rejected. Check GITHUB_TOKEN permissions."
+                        else:
+                            git_error_message = f"🔥 Git Error: {error_str}"
 
                     # Combine messages and rerun
                     local_save_msg = f"✅ Saved {saved_count} files locally."
