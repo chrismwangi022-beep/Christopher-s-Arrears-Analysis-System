@@ -256,46 +256,40 @@ def main():
         st.sidebar.success(st.session_state.upload_success)
         del st.session_state['upload_success']
     
-    ADMIN_PASSWORD = "AdminUpdater"
-    password_input = st.sidebar.text_input("Enter Admin Password", type="password")
-    
-    if password_input == ADMIN_PASSWORD:
-        uploaded_file = st.sidebar.file_uploader(
-            "Upload & Save Daily Report",
-            type=['csv', 'xlsx'],
-            help="Upload a new report to permanently save it to the system's data folder."
-        )
+    uploaded_file = st.sidebar.file_uploader(
+        "Upload & Save Daily Report",
+        type=['csv', 'xlsx'],
+        help="Upload a new report to permanently save it to the system's data folder."
+    )
 
-        if uploaded_file is not None:
-            destination_path = os.path.join("data", uploaded_file.name)
-            overwrite = False
-            
-            st.sidebar.write(f"**File:** `{uploaded_file.name}`")
+    if uploaded_file is not None:
+        destination_path = os.path.join("data", uploaded_file.name)
+        overwrite = False
+        
+        st.sidebar.write(f"**File:** `{uploaded_file.name}`")
 
-            if os.path.exists(destination_path):
-                st.sidebar.warning("⚠️ A file with this name already exists.")
-                overwrite = st.sidebar.checkbox("Overwrite the existing file?")
+        if os.path.exists(destination_path):
+            st.sidebar.warning("⚠️ A file with this name already exists.")
+            overwrite = st.sidebar.checkbox("Overwrite the existing file?")
 
-            if st.sidebar.button("💾 Save File to System"):
-                if os.path.exists(destination_path) and not overwrite:
-                    st.sidebar.error("Overwrite not selected. File not saved.")
-                else:
-                    try:
-                        with open(destination_path, "wb") as f:
-                            f.write(uploaded_file.getvalue())
-                        
-                        # Set success message for next run
-                        st.session_state.upload_success = "✅ File saved successfully!"
-                        st.toast("Reloading all data...")
-                        
-                        # Clear cache and rerun to reflect the new data
-                        st.cache_data.clear()
-                        st.rerun()
+        if st.sidebar.button("💾 Save File to System"):
+            if os.path.exists(destination_path) and not overwrite:
+                st.sidebar.error("Overwrite not selected. File not saved.")
+            else:
+                try:
+                    with open(destination_path, "wb") as f:
+                        f.write(uploaded_file.getvalue())
+                    
+                    # Set success message for next run
+                    st.session_state.upload_success = "✅ File saved successfully!"
+                    st.toast("Reloading all data...")
+                    
+                    # Clear cache and rerun to reflect the new data
+                    st.cache_data.clear()
+                    st.rerun()
 
-                    except Exception as e:
-                        st.sidebar.error(f"Failed to save file: {e}")
-    elif password_input:
-        st.sidebar.error("Incorrect Password")
+                except Exception as e:
+                    st.sidebar.error(f"Failed to save file: {e}")
 
     if df_display.empty:
         st.warning("No data matches the selected filters.")
