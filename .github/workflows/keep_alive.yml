@@ -1,0 +1,14 @@
+name: Wake up Streamlit App
+
+on:
+  schedule:
+    # This runs at 05:00 and 17:00 UTC (roughly 8 AM and 8 PM Nairobi time)
+    - cron: '0 5,17 * * *'
+  workflow_dispatch: # Allows you to run it manually to test
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Streamlit App
+        run: curl -I https://christopher-arrears-analysis-spread-capital.streamlit.app/
