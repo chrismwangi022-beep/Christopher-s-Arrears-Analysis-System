@@ -1,32 +1,15 @@
-name: Guaranteed Streamlit Wakeup
+name: Streamlit Wakeup
 
 on:
   schedule:
-    - cron: '0 */6 * * *' # Runs every 6 hours
-  workflow_dispatch: # Allows you to click "Run Workflow" manually
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
 
 jobs:
-  wake-and-push:
+  ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Create Heartbeat
-        run: |
-          echo "Last Heartbeat: $(date)" > heartbeat.txt
-
-      - name: Commit and Push
-        run: |
-          git config --global user.name "GitHub Action"
-          git config --global user.email "action@github.com"
-          git add heartbeat.txt
-          git commit -m "Heartbeat: Keep Streamlit Alive" || exit 0
-          git push
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Browser Style Ping
+      - name: Cache-Bust Wakeup
         run: |
           curl -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0" \
-          -sL https://christopher-arrears-analysis-spread-capital.streamlit.app/
+          -L "https://christopher-arrears-analysis-spread-capital.streamlit.app/?v=$(date +%s)"
