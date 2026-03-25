@@ -1,4 +1,4 @@
-name: Streamlit Wakeup
+name: Guaranteed Streamlit Wakeup
 
 on:
   schedule:
@@ -6,11 +6,30 @@ on:
   workflow_dispatch:
 
 jobs:
-  ping:
+  wake-and-push:
     runs-on: ubuntu-latest
+    permissions: # This explicitly tells the job it has permission
+      contents: write
     steps:
-      - name: Force Wakeup
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Create Heartbeat
+        run: |
+          echo "Last Heartbeat: $(date)" > heartbeat_log.txt
+
+      - name: Commit and Push
+        run: |
+          git config --global user.name "GitHub Action"
+          git config --global user.email "action@github.com"
+          git add heartbeat_log.txt
+          git commit -m "Heartbeat: Keep Streamlit Alive" || exit 0
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Final Browser Ping
         run: |
           curl -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0" \
-          -L --max-redirs 25 \
+          -L --max-redirs 10 \
           "https://christopher-arrears-analysis-spread-capital.streamlit.app/"
