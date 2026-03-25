@@ -9,7 +9,8 @@ jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Cache-Bust Wakeup
+      - name: Force Wakeup
         run: |
           curl -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0" \
-          -L "https://christopher-arrears-analysis-spread-capital.streamlit.app/?v=$(date +%s)"
+          -L --max-redirs 20 \
+          "https://christopher-arrears-analysis-spread-capital.streamlit.app/?v=$(date +%s)"
