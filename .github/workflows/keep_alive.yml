@@ -1,6 +1,6 @@
 name: Guaranteed Streamlit Wakeup
 
-# This line clears the Node.js 20 warning
+# Fixes the Node.js 20 Deprecation Warning
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
@@ -33,6 +33,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Final Browser Ping
+        # Forces a green checkmark even if the ping loops
         run: |
           curl -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0" \
           -L --max-redirs 5 \
