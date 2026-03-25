@@ -1,9 +1,13 @@
 name: Guaranteed Streamlit Wakeup
 
+# This line clears the Node.js 20 warning
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 on:
   schedule:
-    - cron: '0 */6 * * *' # Runs every 6 hours
-  workflow_dispatch: # Allows you to trigger it manually
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
 
 jobs:
   wake-and-push:
@@ -29,7 +33,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Final Browser Ping
-        # The '|| true' ensures the workflow finishes with a GREEN checkmark
         run: |
           curl -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0" \
           -L --max-redirs 5 \
