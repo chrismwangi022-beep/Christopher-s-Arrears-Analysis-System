@@ -491,11 +491,6 @@ def main():
     # AI Portfolio Insights
     st.subheader("🤖 AI Portfolio Insights")
 
-    with st.spinner("Generating AI insights..."):
-        ai_insights = generate_ai_insights(metrics)
-
-    with st.container(border=True):
-        st.markdown(ai_insights)
     try:
         with st.spinner("Generating AI insights..."):
             ai_insights = generate_ai_insights(metrics)
