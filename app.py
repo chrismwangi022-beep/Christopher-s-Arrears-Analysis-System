@@ -41,6 +41,7 @@ from src.constants import (
     CHART_CONFIG,
     DATA_FOLDER,
 )
+from src.ai_engine import generate_ai_insights
 
 # Page configuration
 st.set_page_config(
@@ -392,6 +393,13 @@ def main():
     avg_days = df_display[df_display['Days'].notna() & (df_display['Days'] > 0)]['Days'].mean() or 0
     par_percentage = calculate_par_percentage(df_display)
     
+    metrics = {
+        "total_arrears": round(total_arrears, 2),
+        "total_portfolio": round(total_portfolio, 2),
+        "accounts_in_arrears": int(accounts_in_arrears),
+        "average_days_past_due": round(avg_days, 1),
+        "par_percentage": round(par_percentage, 2),
+    }
     # 1. Total Arrears
     with col1:
         st.markdown(f"""
@@ -437,6 +445,64 @@ def main():
         </div>
         """, unsafe_allow_html=True)
     
+    st.markdown("---")
+
+    alerts = []
+    if par_percentage > 10:
+        alerts.append("PAR exceeds acceptable threshold.")
+
+    if avg_days > 45:
+        alerts.append("Average delinquency period is increasing.")
+
+    if total_arrears > 5000000:
+        alerts.append("Total arrears exposure is critically high.")
+
+    metrics["alerts"] = alerts
+
+    officer_summary = (
+        df_display.groupby("Loan_Officer")["Arrears"]
+        .sum()
+        .sort_values(ascending=False)
+        .head(10)
+        .to_dict()
+    )
+
+    metrics["officer_summary"] = officer_summary
+
+    branch_summary = (
+        df_display.groupby("Branch")["Arrears"]
+        .sum()
+        .sort_values(ascending=False)
+        .head(5)
+        .to_dict()
+    )
+
+    metrics["top_branch_arrears"] = branch_summary
+
+    recent_trend = (
+        df.groupby("Report_Date")["Arrears"]
+        .sum()
+        .tail(7)
+        .to_dict()
+    )
+
+    metrics["recent_trend"] = recent_trend
+
+    # AI Portfolio Insights
+    st.subheader("🤖 AI Portfolio Insights")
+
+    with st.spinner("Generating AI insights..."):
+        ai_insights = generate_ai_insights(metrics)
+
+    with st.container(border=True):
+        st.markdown(ai_insights)
+    try:
+        with st.spinner("Generating AI insights..."):
+            ai_insights = generate_ai_insights(metrics)
+        with st.container(border=True):
+            st.markdown(ai_insights)
+    except Exception as e:
+        st.warning(f"AI insights unavailable: {e}")
     st.markdown("---")
     
     # Charts Section
