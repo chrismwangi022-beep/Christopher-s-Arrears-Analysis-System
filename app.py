@@ -12,6 +12,7 @@ import sys
 import os
 import io
 import git
+import threading
 
 # Add src to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -491,13 +492,25 @@ def main():
     # AI Portfolio Insights
     st.subheader("🤖 AI Portfolio Insights")
 
-    try:
-        with st.spinner("Generating AI insights..."):
-            ai_insights = generate_ai_insights(metrics)
+    if "ai_done" not in st.session_state:
+        st.session_state.ai_done = False
+
+    def run_ai():
+        result = generate_ai_insights(metrics)
+        st.session_state.ai_result = result
+        st.session_state.ai_done = True
+
+    if st.button("🚀 Start AI Analysis"):
+        st.session_state.ai_done = False
+        thread = threading.Thread(target=run_ai)
+        thread.start()
+
+    st.write("App is still usable while AI runs...")
+
+    if st.session_state.ai_done:
         with st.container(border=True):
-            st.markdown(ai_insights)
-    except Exception as e:
-        st.warning(f"AI insights unavailable: {e}")
+            st.markdown(st.session_state.ai_result)
+
     st.markdown("---")
     
     # Charts Section
