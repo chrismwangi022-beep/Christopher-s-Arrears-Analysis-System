@@ -13,6 +13,7 @@ import os
 import io
 import git
 import threading
+import queue
 
 # Add src to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -492,50 +493,44 @@ def main():
     # AI Portfolio Insights
     st.subheader("🤖 AI Portfolio Insights")
 
-    # ── INIT STATE ─────────────────────────────
+    if "ai_queue" not in st.session_state:
+        st.session_state.ai_queue = queue.Queue()
+
     if "ai_running" not in st.session_state:
         st.session_state.ai_running = False
 
     if "ai_result" not in st.session_state:
         st.session_state.ai_result = None
 
+    def run_ai_thread(metrics_data, result_queue):
+        result = generate_ai_insights(metrics_data)
+        result_queue.put(result)
 
-    # ── BACKGROUND FUNCTION ────────────────────
-    def run_ai_thread(metrics_for_thread):
-        try:
-            result = generate_ai_insights(metrics_for_thread)
-            st.session_state.ai_result = result
-        except Exception as e:
-            st.session_state.ai_result = f"Error: {str(e)}"
-        finally:
-            st.session_state.ai_running = False
-
-
-    # ── BUTTON ─────────────────────────────────
     if st.button("🚀 Start AI Analysis"):
-
         if not st.session_state.ai_running:
-            with st.spinner("Processing AI insights..."):
-                st.session_state.ai_running = True
-                st.session_state.ai_result = None
+            st.session_state.ai_running = True
+            st.session_state.ai_result = None
+            thread = threading.Thread(
+                target=run_ai_thread,
+                args=(metrics, st.session_state.ai_queue),
+                daemon=True
+            )
+            thread.start()
 
-                thread = threading.Thread(
-                    target=run_ai_thread,
-                    args=(metrics,), # Pass metrics as an argument
-                    daemon=True
-                )
-                thread.start()
-
-
-    # ── UI STATES ──────────────────────────────
+    # ── POLL RESULTS ──────────────────────────
     if st.session_state.ai_running:
-        st.info("🤖 AI is analyzing portfolio in background...")
-    elif st.session_state.ai_result:
-        st.success("AI Analysis Complete")
-        with st.container(border=True):
-            st.markdown(st.session_state.ai_result)
-    else:
+        st.info("🤖 AI analyzing in background...")
+        if not st.session_state.ai_queue.empty():
+            st.session_state.ai_result = st.session_state.ai_queue.get()
+            st.session_state.ai_running = False
+            st.rerun()
+
+    # ── SHOW RESULT ───────────────────────────
+    if st.session_state.ai_result:
+        st.markdown(st.session_state.ai_result)
+    elif not st.session_state.ai_running:
         st.write("Click 'Start AI Analysis' to begin")
+
     st.markdown("---")
     
     # Charts Section
