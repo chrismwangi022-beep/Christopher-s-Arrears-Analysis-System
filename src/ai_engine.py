@@ -43,14 +43,14 @@ ORCHESTRATOR_DIRECTIVE = "Interpret the provided JSON data according to your ana
 MAX_RETRIES = 2
 INITIAL_BACKOFF = 2  # seconds
 
-# Global Client to prevent redundant instantiation
-if "genai_client" not in st.session_state:
-    st.session_state.genai_client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
-
 def _execute_agent_call(data: dict, system_prompt: str) -> str:
     """
     Unified production runner for all AI agents with model fallback and exponential backoff.
     """
+    # Initialize client inside the session context to avoid AttributeErrors during module import
+    if "genai_client" not in st.session_state:
+        st.session_state.genai_client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+
     metrics_json = format_metrics(data)
     last_error = ""
 
