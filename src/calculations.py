@@ -218,9 +218,9 @@ def calculate_par_percentage(df: pd.DataFrame) -> float:
         
         # Get total portfolio
         if principle_col:
-            total_portfolio = df[principle_col].sum()
+            total_portfolio = calc_df[principle_col].sum()
         elif total_balance_col:
-            total_portfolio = df[total_balance_col].sum()
+            total_portfolio = calc_df[total_balance_col].sum()
         else:
             return 0.0
         
@@ -767,7 +767,7 @@ def get_standard_metrics_package(df_display: pd.DataFrame, df_full: pd.DataFrame
         "accounts_in_arrears": int(accounts_in_arrears),
         "average_days_past_due": round(float(avg_days), 1),
         "par_percentage": round(float(par_percentage), 2),
-        "threshold_flags": threshold_flags,
+        "risk_metrics": risk_metrics,
         "officer_summary": officer_summary,
         "top_branch_arrears": branch_summary,
         "recent_trend": recent_trend

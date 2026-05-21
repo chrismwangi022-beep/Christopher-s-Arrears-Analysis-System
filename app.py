@@ -696,13 +696,13 @@ def main():
     with col_rank2:
         st.markdown("### Officer Performance – Praise vs Improve")
         best, worst = get_officer_ranking_split(df_display)
-            tab_best, tab_worst = st.tabs(["👏 Officers to Praise", "⚠️ Officers Needing Improvement"])
-            
-            with tab_best:
-                st.dataframe(best, use_container_width=True, hide_index=True)
-            
-            with tab_worst:
-                st.dataframe(worst, use_container_width=True, hide_index=True)
+        tab_best, tab_worst = st.tabs(["👏 Officers to Praise", "⚠️ Officers Needing Improvement"])
+        
+        with tab_best:
+            st.dataframe(best, use_container_width=True, hide_index=True)
+        
+        with tab_worst:
+            st.dataframe(worst, use_container_width=True, hide_index=True)
     
     # Dynamic Branch Insights
     if selected_branches and len(selected_branches) == 1:
@@ -756,8 +756,9 @@ def main():
     if selected_products and "All" not in selected_products:
         df_trend = df_trend[df_trend['Product'].isin(selected_products)]
 
-    trend_grp = get_filtered_trend_data(df_trend, group_choice)
-    if not trend_grp.empty:
+    if 'Report_Date' in df.columns:
+        trend_grp = get_filtered_trend_data(df_trend, group_choice)
+        if not trend_grp.empty:
             try:
                 palette = [COLORS['accent_cyan'], COLORS['accent_orange'], COLORS['accent_amber'], COLORS['accent_red'], COLORS['accent_yellow']]
                 fig_daily = px.line(

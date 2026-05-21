@@ -32,6 +32,14 @@ from .ai_agents import (
     run_branch_agent
 )
 
+# ─────────────────────────────────────────────
+# MODEL CONFIG
+# ─────────────────────────────────────────────
+
+MODEL_NAME = "gemini-2.5-flash"
+ORCHESTRATOR_DIRECTIVE = "Interpret the provided JSON data according to your analytical persona. Provide the structured executive summary now."
+
+
 # Global Client to prevent redundant instantiation
 if "genai_client" not in st.session_state:
     st.session_state.genai_client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
@@ -55,14 +63,6 @@ def run_multi_agent_analysis(data: dict[str, Any]) -> dict[str, str]:
         "recovery": _execute_agent_call(data, RECOVERY_STRATEGY_AGENT_PROMPT),
         "branch": _execute_agent_call(data, BRANCH_PERFORMANCE_ANALYST_PROMPT)
     }
-
-# ─────────────────────────────────────────────
-# MODEL CONFIG
-# ─────────────────────────────────────────────
-
-MODEL_NAME = "gemini-2.5-flash"
-ORCHESTRATOR_DIRECTIVE = "Interpret the provided JSON data according to your analytical persona. Provide the structured executive summary now."
-
 
 # ─────────────────────────────────────────────
 # CLEAN METRICS
@@ -349,15 +349,3 @@ TASK:
 > ⚠️ **Recovery Strategy Unavailable**
 > {str(e)}
 """
-
-
-def run_multi_agent_analysis(data: dict[str, Any]) -> dict[str, str]:
-    """
-    Multi-agent orchestrator for systemic risk, recovery operations, and branch performance.
-    Passes structured input to all specialized agents and aggregates their findings.
-    """
-    return {
-        "risk": run_risk_agent(data),
-        "recovery": run_recovery_agent(data),
-        "branch": run_branch_agent(data)
-    }
