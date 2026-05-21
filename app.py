@@ -725,27 +725,17 @@ def main():
         st.markdown("### Officer Performance – Praise vs Improve")
         officer_perf = get_officer_performance(df_display)
         if not officer_perf.empty:
-            # Best 5 (praise) and worst 5 (needs improvement)
-            best = officer_perf.nsmallest(5, 'Ratio')
-            worst = officer_perf.nlargest(5, 'Ratio')
+            # Display structured officer risk ranking using branch shares
+            best = officer_perf.nsmallest(5, 'branch_share_pct')
+            worst = officer_perf.nlargest(5, 'branch_share_pct')
             
             tab_best, tab_worst = st.tabs(["👏 Officers to Praise", "⚠️ Officers Needing Improvement"])
             
             with tab_best:
-                st.dataframe(
-                    best[['Officer', 'Arrears', 'Principle', 'Ratio']].rename(columns={
-                        'Ratio': 'Arrears/Portfolio Ratio'
-                    }),
-                    use_container_width=True,
-                )
+                st.dataframe(best, use_container_width=True, hide_index=True)
             
             with tab_worst:
-                st.dataframe(
-                    worst[['Officer', 'Arrears', 'Principle', 'Ratio']].rename(columns={
-                        'Ratio': 'Arrears/Portfolio Ratio'
-                    }),
-                    use_container_width=True,
-                )
+                st.dataframe(worst, use_container_width=True, hide_index=True)
     
     # Dynamic Branch Insights
     if selected_branches and len(selected_branches) == 1:

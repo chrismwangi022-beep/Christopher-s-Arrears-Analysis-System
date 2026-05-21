@@ -9,6 +9,58 @@ from typing import Dict, List, Tuple, Optional
 from .constants import AGING_BUCKETS
 
 
+def _safe_divide(numerator: float, denominator: float) -> float:
+    """
+    Base division logic for ratios (0.0 to 1.0+). 
+    Use safe_percentage for concentration metrics.
+    """
+    if pd.isna(numerator) or pd.isna(denominator) or denominator <= 0:
+        return 0.0
+    return float(numerator / denominator)
+
+
+def safe_percentage(numerator: float, denominator: float, context_type: str) -> float:
+    """
+    Standardized percentage calculation with scope validation.
+    Ensures 100% is only returned when numerator exactly equals denominator 
+    and the scope (context_type) is valid.
+    
+    context_type options: "portfolio", "branch", "filtered_view"
+    """
+    if pd.isna(numerator) or pd.isna(denominator) or denominator <= 0:
+        return 0.0
+
+    # A 100% value must only be returned if numerator == denominator
+    # Using np.isclose to handle floating point precision
+    is_exact = np.isclose(float(numerator), float(denominator), rtol=1e-07)
+    
+    if is_exact:
+        # Return 100.0 only if mathematically absolute and non-zero
+        return 100.0 if numerator > 0 else 0.0
+
+    percentage = (numerator / denominator) * 100
+
+    # Prevent misleading reporting: if they aren't actually equal, 
+    # ensure the result does not round up to 100.0
+    return min(float(percentage), 99.99)
+
+
+def get_portfolio_share(value: float, total: float) -> float:
+    """
+    Calculates percentage share of a specific value against the total portfolio.
+    Introduced for strict separation of company-wide metrics.
+    """
+    return safe_percentage(value, total, "portfolio")
+
+
+def get_branch_share(value: float, branch_total: float) -> float:
+    """
+    Calculates percentage share of a value (e.g., officer arrears) against a branch total.
+    Introduced for local risk assessment.
+    """
+    return safe_percentage(value, branch_total, "branch")
+
+
 def find_column_case_insensitive(df: pd.DataFrame, column_name: str) -> Optional[str]:
     """
     Find a column in the dataframe case-insensitively.
@@ -144,7 +196,7 @@ def get_top_movers(
 def calculate_par_percentage(df: pd.DataFrame) -> float:
     """
     Calculate Portfolio at Risk (PAR) percentage.
-    PAR % = (Sum of Arrears for accounts with Days > 0) / Total Portfolio × 100
+    PAR % = (Sum of Arrears for accounts with Days > 0) / Total Portfolio Principal × 100
     Handles missing columns gracefully with case-insensitive lookup.
     """
     if df.empty:
@@ -174,10 +226,7 @@ def calculate_par_percentage(df: pd.DataFrame) -> float:
         else:
             return 0.0
         
-        if total_portfolio == 0:
-            return 0.0
-        
-        return (total_arrears / total_portfolio) * 100
+        return get_portfolio_share(total_arrears, total_portfolio)
     except Exception as e:
         print(f"Error calculating PAR percentage: {e}")
         return 0.0
@@ -220,11 +269,11 @@ def calculate_arrears_to_portfolio_ratio(df: pd.DataFrame, group_by: Optional[st
             
             # Use Principle if available, otherwise TotalBalance
             portfolio_col = principle_col if principle_col else total_balance_col
+            
             if portfolio_col:
-                grouped['Ratio'] = grouped[arrears_col] / grouped[portfolio_col].replace(0, np.nan)
-                grouped['Ratio'] = grouped['Ratio'].fillna(0.0)
+                grouped['Ratio'] = grouped.apply(lambda x: _safe_divide(x[arrears_col], x[portfolio_col]), axis=1)
             else:
-                grouped['Ratio'] = 0.0
+                grouped['Ratio'] = 0.0 
             
             # Rename columns for consistency
             grouped = grouped.rename(columns={group_col: 'Product' if group_col == 'product' else group_col})
@@ -243,7 +292,7 @@ def calculate_arrears_to_portfolio_ratio(df: pd.DataFrame, group_by: Optional[st
             else:
                 portfolio = 0
             
-            ratio = total_arrears / portfolio if portfolio > 0 else 0.0
+            ratio = _safe_divide(total_arrears, portfolio)
             return pd.DataFrame({'Ratio': [ratio]})
         except Exception as e:
             print(f"Error calculating ratio: {e}")
@@ -318,31 +367,47 @@ def get_star_performers(df: pd.DataFrame, top_n: int = 5) -> pd.DataFrame:
 
 def get_officer_performance(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Get arrears-to-portfolio performance for each loan officer.
-    Higher ratio = needs improvement, lower ratio = star performer.
+    Identifies high-risk officers by computing relative shares within branch and portfolio.
+    Officers are ranked by arrears amount within their respective branches.
+    Returns: DataFrame [Branch, Officer, Arrears, branch_share_pct, view_share_pct]
     """
-    if df.empty:
-        return pd.DataFrame()
-    
+    if df.empty: return pd.DataFrame()
+
     officer_col = find_column_case_insensitive(df, 'Loan_Officer')
-    if officer_col is None:
+    branch_col = find_column_case_insensitive(df, 'Branch')
+    arrears_col = find_column_case_insensitive(df, 'Arrears')
+
+    if not all([officer_col, branch_col, arrears_col]):
         return pd.DataFrame()
-    
+
     try:
-        perf = calculate_arrears_to_portfolio_ratio(df, group_by=officer_col)
-        if perf.empty:
-            return pd.DataFrame()
-        
-        # Clean officer names for display
-        perf = perf.rename(columns={officer_col: 'Officer'})
-        perf['Officer'] = perf['Officer'].astype(str).str.title()
-        
-        return perf.sort_values('Ratio', ascending=False)
-    except Exception as e:
-        print(f"Error calculating officer performance: {e}")
+        # 1. Compute totals for the current dataset scope (could be filtered)
+        view_total_arrears = df[arrears_col].sum()
+        branch_totals = df.groupby(branch_col)[arrears_col].sum().rename("branch_total_arrears")
+
+        # 2. Aggregate arrears per officer and branch
+        perf = df.groupby([branch_col, officer_col])[arrears_col].sum().reset_index()
+
+        # 3. Merge branch totals to compute local shares relative to the branch
+        perf = perf.merge(branch_totals, on=branch_col)
+
+        # 4. Compute relative risk metrics using shared logic
+        perf['branch_share_pct'] = perf.apply(
+            lambda x: get_branch_share(x[arrears_col], x['branch_total_arrears']), axis=1
+        )
+        perf['view_share_pct'] = perf[arrears_col].apply(
+            lambda x: safe_percentage(x, view_total_arrears, "filtered_view")
+        )
+
+        # 5. Rank within each branch (highest arrears first)
+        perf = perf.sort_values([branch_col, arrears_col], ascending=[True, False])
+
+        # 6. Standardize columns for downstream structured use
+        perf = perf.rename(columns={officer_col: 'Officer', branch_col: 'Branch', arrears_col: 'Arrears'})
+        return perf[['Branch', 'Officer', 'Arrears', 'branch_share_pct', 'view_share_pct']]
+
+    except Exception:
         return pd.DataFrame()
-    
-    return perf
 
 
 def categorize_by_aging(df: pd.DataFrame) -> pd.DataFrame:
@@ -421,12 +486,10 @@ def get_portfolio_distribution_by_aging(df: pd.DataFrame) -> pd.DataFrame:
         else:
             total_portfolio = 0
         
-        if total_portfolio > 0 and 'Total_Principle' in distribution.columns:
-            distribution['Portfolio_Percentage'] = (distribution['Total_Principle'] / total_portfolio) * 100
-        else:
-            distribution['Portfolio_Percentage'] = 0.0
-        
-        # Sort by aging severity (custom order)
+        distribution['Portfolio_Percentage'] = distribution['Total_Principle'].apply(
+            lambda x: safe_percentage(x, total_portfolio, "filtered_view")
+        )
+
         bucket_order = ["Current", "Early Warning (1-30)", "Moderate (31-60)", "Warning (61-90)", "Critical (>90)"]
         distribution['Order'] = distribution['Aging_Bucket'].apply(
             lambda x: bucket_order.index(x) if x in bucket_order else 999
@@ -455,10 +518,7 @@ def get_branch_risk_percentage(df: pd.DataFrame, branch: str) -> float:
         total_arrears = df[arrears_col].sum()
         branch_arrears = branch_df[arrears_col].sum()
         
-        if total_arrears == 0:
-            return 0.0
-        
-        return (branch_arrears / total_arrears) * 100
+        return get_portfolio_share(branch_arrears, total_arrears)
     except Exception:
         return 0.0
 
