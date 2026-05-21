@@ -12,8 +12,6 @@ import sys
 import os
 import io
 import git
-import threading
-import queue
 
 # Add src to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -490,46 +488,23 @@ def main():
 
     metrics["recent_trend"] = recent_trend
 
-    # AI Portfolio Insights
     st.subheader("🤖 AI Portfolio Insights")
 
-    if "ai_queue" not in st.session_state:
-        st.session_state.ai_queue = queue.Queue()
-
-    if "ai_running" not in st.session_state:
-        st.session_state.ai_running = False
-
-    if "ai_result" not in st.session_state:
-        st.session_state.ai_result = None
-
-    def run_ai_thread(metrics_data, result_queue):
-        result = generate_ai_insights(metrics_data)
-        result_queue.put(result)
-
     if st.button("🚀 Start AI Analysis"):
-        if not st.session_state.ai_running:
-            st.session_state.ai_running = True
-            st.session_state.ai_result = None
-            thread = threading.Thread(
-                target=run_ai_thread,
-                args=(metrics, st.session_state.ai_queue),
-                daemon=True
-            )
-            thread.start()
 
-    # ── POLL RESULTS ──────────────────────────
-    if st.session_state.ai_running:
-        st.info("🤖 AI analyzing in background...")
-        if not st.session_state.ai_queue.empty():
-            st.session_state.ai_result = st.session_state.ai_queue.get()
-            st.session_state.ai_running = False
-            st.rerun()
+        with st.spinner("🤖 Analyzing portfolio..."):
 
-    # ── SHOW RESULT ───────────────────────────
-    if st.session_state.ai_result:
-        st.markdown(st.session_state.ai_result)
-    elif not st.session_state.ai_running:
-        st.write("Click 'Start AI Analysis' to begin")
+            try:
+
+                ai_insights = generate_ai_insights(metrics)
+
+                st.success("✅ Analysis Complete")
+
+                st.markdown(ai_insights)
+
+            except Exception as e:
+
+                st.error(f"AI Error: {str(e)}")
 
     st.markdown("---")
     
