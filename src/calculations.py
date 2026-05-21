@@ -404,6 +404,16 @@ def get_officer_performance(df: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame()
 
 
+def get_officer_ranking_split(df: pd.DataFrame, n: int = 5) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """Splits officers into best and worst performers based on branch share."""
+    perf = get_officer_performance(df)
+    if perf.empty:
+        return pd.DataFrame(), pd.DataFrame()
+    best = perf.nsmallest(n, 'branch_share_pct')
+    worst = perf.nlargest(n, 'branch_share_pct')
+    return best, worst
+
+
 def categorize_by_aging(df: pd.DataFrame) -> pd.DataFrame:
     """
     Categorize accounts by aging buckets.
@@ -653,6 +663,49 @@ def get_priority_band_summary(df: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame()
 
 
+def get_branch_arrears_summary(df: pd.DataFrame) -> pd.Series:
+    """Aggregates total arrears by branch for UI display."""
+    branch_col = find_column_case_insensitive(df, 'Branch') or 'Branch'
+    arrears_col = find_column_case_insensitive(df, 'Arrears') or 'Arrears'
+    if df.empty: return pd.Series(dtype=float)
+    return df.groupby(branch_col)[arrears_col].sum().sort_values(ascending=False)
+
+
+def get_product_arrears_summary(df: pd.DataFrame) -> pd.DataFrame:
+    """Aggregates total arrears by product for UI display."""
+    product_col = find_column_case_insensitive(df, 'Product') or 'Product'
+    arrears_col = find_column_case_insensitive(df, 'Arrears') or 'Arrears'
+    if df.empty: return pd.DataFrame()
+    return df.groupby(product_col)[arrears_col].sum().reset_index()
+
+
+def get_aging_arrears_summary(df: pd.DataFrame) -> pd.Series:
+    """Aggregates total arrears by aging bucket for UI display."""
+    arrears_col = find_column_case_insensitive(df, 'Arrears') or 'Arrears'
+    if df.empty: return pd.Series(dtype=float)
+    if 'Aging_Bucket' not in df.columns:
+        return pd.Series(dtype=float)
+    return df.groupby('Aging_Bucket')[arrears_col].sum()
+
+
+def get_filtered_trend_data(df: pd.DataFrame, group_by: str, top_n: int = 10) -> pd.DataFrame:
+    """Prepares trend data for plotting, ensuring ZERO math remains in the UI."""
+    if df.empty or 'Report_Date' not in df.columns:
+        return pd.DataFrame()
+    
+    df_trend = df.copy()
+    df_trend['Report_Date'] = pd.to_datetime(df_trend['Report_Date'], errors='coerce')
+    df_trend = df_trend.dropna(subset=['Report_Date'])
+    
+    group_col = find_column_case_insensitive(df_trend, group_by) or group_by
+    trend_grp = df_trend.groupby([pd.Grouper(key='Report_Date', freq='D'), group_col])['Arrears'].sum().reset_index()
+    
+    if trend_grp[group_col].nunique() > top_n:
+        totals = df_trend.groupby(group_col)['Arrears'].sum().nlargest(top_n)
+        trend_grp = trend_grp[trend_grp[group_col].isin(totals.index)]
+    return trend_grp
+
+
 def get_standard_metrics_package(df_display: pd.DataFrame, df_full: pd.DataFrame) -> Dict[str, Any]:
     """
     Centralized aggregation logic to bundle metrics for AI interpretation.
@@ -683,12 +736,11 @@ def get_standard_metrics_package(df_display: pd.DataFrame, df_full: pd.DataFrame
     avg_days = df_display[df_display[days_col].notna() & (df_display[days_col] > 0)][days_col].mean() or 0
     par_percentage = calculate_par_percentage(df_display)
 
-    # Structured threshold flags (No strings allowed in calculations engine)
-    threshold_flags = {
-        "par_limit_exceeded": bool(par_percentage > 10.0),
-        "aging_limit_exceeded": bool(avg_days > 45.0),
-        "exposure_limit_exceeded": bool(total_arrears > 5000000.0),
-        "critical_par_redline": bool(par_percentage > 25.0)
+    # Raw metrics only - Let agents interpret thresholds
+    risk_metrics = {
+        "par_percentage": round(float(par_percentage), 2),
+        "avg_days_past_due": round(float(avg_days), 1),
+        "exposure_amount": round(float(total_arrears), 2)
     }
 
     # Summaries

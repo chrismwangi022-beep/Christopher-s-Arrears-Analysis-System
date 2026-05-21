@@ -1,12 +1,52 @@
 """
 Spread Capital Limited — AI Arrears Intelligence Personas
-src/ai_agents/__init__.py (Refactored to package)
+src/ai_agents.py (Refactored to Interpreters)
 
 Strictly for interpretation instructions and system prompts.
-No mathematical logic allowed here.
+No mathematical logic allowed.
 """
 
-from .branch_agent import BRANCH_AGENT_SYSTEM_PROMPT
+import json
+from typing import Any
+import streamlit as st
+from google import genai
+
+from .branch_agent import BRANCH_AGENT_SYSTEM_PROMPT, BRANCH_PERFORMANCE_ANALYST_PROMPT
+from .risk_agent import RISK_ANALYSIS_AGENT_PROMPT
+from .recovery_agent import RECOVERY_STRATEGY_AGENT_PROMPT
+
+MODEL_NAME = "gemini-2.5-flash"
+
+def _call_gemini(data: dict[str, Any], system_prompt: str) -> str:
+    """Private shared runner to execute AI interpretation without logic duplication."""
+    try:
+        client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+        # Strictly JSON-in, String-out interpretation
+        prompt = f"INPUT DATA (JSON):\n{json.dumps(data)}\n\nTASK: Interpret this data."
+        
+        response = client.models.generate_content(
+            model=MODEL_NAME,
+            contents=[system_prompt, prompt]
+        )
+        return response.text.strip()
+    except Exception as e:
+        return f"Interpretation Error: {str(e)}"
+
+def run_risk_agent(data: dict[str, Any]) -> str:
+    """Interprets systemic portfolio risk."""
+    return _call_gemini(data, RISK_ANALYSIS_AGENT_PROMPT)
+
+def run_recovery_agent(data: dict[str, Any]) -> str:
+    """Interprets tactical recovery actions."""
+    return _call_gemini(data, RECOVERY_STRATEGY_AGENT_PROMPT)
+
+def run_branch_agent(data: dict[str, Any]) -> str:
+    """Interprets branch-level performance disparities."""
+    return _call_gemini(data, BRANCH_PERFORMANCE_ANALYST_PROMPT)
+
+def run_standard_analyst(data: dict[str, Any]) -> str:
+    """Standard executive summary interpreter."""
+    return _call_gemini(data, RISK_ANALYST_SYSTEM_PROMPT)
 
 RISK_ANALYST_SYSTEM_PROMPT = """
 SPREAD CAPITAL LIMITED — ARREARS AI ENGINE

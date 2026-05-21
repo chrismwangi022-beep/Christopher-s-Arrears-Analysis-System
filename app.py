@@ -32,6 +32,12 @@ from src.calculations import (
     get_arrears_time_series,
     get_trend_for_entity,
     get_top_movers,
+    get_branch_arrears_summary,
+    get_product_arrears_summary,
+    get_aging_arrears_summary,
+    get_filtered_trend_data,
+    get_officer_ranking_split,
+    get_standard_metrics_package,
 )
 from src.constants import (
     COLORS,
@@ -444,22 +450,33 @@ def main():
     st.markdown("---")
 
     st.subheader("🤖 AI Portfolio Insights")
+    
+    if 'ai_results' not in st.session_state:
+        st.session_state.ai_results = None
 
     if st.button("🚀 Start AI Analysis"):
-
         with st.spinner("🤖 Analyzing portfolio..."):
-
             try:
-
-                ai_insights = generate_ai_insights(metrics)
-
+                st.session_state.ai_results = generate_ai_insights(metrics)
                 st.success("✅ Analysis Complete")
-
-                st.markdown(ai_insights)
-
             except Exception as e:
+                st.error(f"AI System Error: {str(e)}")
 
-                st.error(f"AI Error: {str(e)}")
+    if st.session_state.ai_results:
+        ai_results = st.session_state.ai_results
+        if "executive_summary" in ai_results:
+            st.markdown(ai_results["executive_summary"])
+        
+        tab_risk, tab_rec, tab_br = st.tabs(["🛡️ Risk AI", "🛠️ Recovery AI", "🏢 Branch AI"])
+        with tab_risk:
+            st.markdown(ai_results.get("risk", "Interpretation pending..."))
+        with tab_rec:
+            st.markdown(ai_results.get("recovery", "Operation strategy pending..."))
+        with tab_br:
+            st.markdown(ai_results.get("branch", "Performance gap analysis pending..."))
+            
+        st.markdown("---")
+        st.caption(f"🤖 Multi-Agent Orchestrator · Active Agents: {len(ai_results)}")
 
     st.markdown("---")
     
@@ -472,7 +489,7 @@ def main():
     
     with col_chart1:
         # Arrears by Branch
-        branch_totals = df_display.groupby('Branch')['Arrears'].sum().sort_values(ascending=False)
+        branch_totals = get_branch_arrears_summary(df_display)
         if not branch_totals.empty:
             fig_branch = go.Figure(data=[
                 go.Bar(
@@ -495,7 +512,7 @@ def main():
     
     with col_chart2:
         # Arrears by Product - Pie chart (JENGA vs DUMISHA vs others)
-        product_totals = df_display.groupby('Product')['Arrears'].sum().reset_index()
+        product_totals = get_product_arrears_summary(df_display)
         if not product_totals.empty:
             # Highlight JENGA and DUMISHA explicitly, others remain separate
             fig_product = px.pie(
@@ -516,7 +533,7 @@ def main():
     
     # Arrears by Aging
     st.subheader("Arrears by Aging Buckets")
-    aging_totals = df_display.groupby('Aging_Bucket')['Arrears'].sum()
+    aging_totals = get_aging_arrears_summary(df_display)
     
     if not aging_totals.empty:
         # Color mapping for aging buckets
@@ -678,12 +695,7 @@ def main():
     
     with col_rank2:
         st.markdown("### Officer Performance – Praise vs Improve")
-        officer_perf = get_officer_performance(df_display)
-        if not officer_perf.empty:
-            # Display structured officer risk ranking using branch shares
-            best = officer_perf.nsmallest(5, 'branch_share_pct')
-            worst = officer_perf.nlargest(5, 'branch_share_pct')
-            
+        best, worst = get_officer_ranking_split(df_display)
             tab_best, tab_worst = st.tabs(["👏 Officers to Praise", "⚠️ Officers Needing Improvement"])
             
             with tab_best:
@@ -744,25 +756,8 @@ def main():
     if selected_products and "All" not in selected_products:
         df_trend = df_trend[df_trend['Product'].isin(selected_products)]
 
-    if 'Report_Date' in df_trend.columns:
-        df_trend = df_trend.copy()
-        df_trend['Report_Date'] = pd.to_datetime(df_trend['Report_Date'], errors='coerce')
-        df_trend = df_trend.dropna(subset=['Report_Date'])
-
-        trend_grp = df_trend.groupby([pd.Grouper(key='Report_Date', freq='D'), group_choice])['Arrears'].sum().reset_index()
-
-        # If 'All' selected and too many entities, limit to top 10 by total arrears
-        selected_list_map = {"Branch": selected_branches, "Loan_Officer": selected_officers, "Product": selected_products}
-        selected_list = selected_list_map.get(group_choice)
-
-        if selected_list is not None and "All" in selected_list:
-            # compute top entities by total arrears
-            totals = df_trend.groupby(group_choice)['Arrears'].sum().nlargest(10)
-            top_entities = totals.index.tolist()
-            if trend_grp[group_choice].nunique() > 10:
-                trend_grp = trend_grp[trend_grp[group_choice].isin(top_entities)]
-
-        if not trend_grp.empty:
+    trend_grp = get_filtered_trend_data(df_trend, group_choice)
+    if not trend_grp.empty:
             try:
                 palette = [COLORS['accent_cyan'], COLORS['accent_orange'], COLORS['accent_amber'], COLORS['accent_red'], COLORS['accent_yellow']]
                 fig_daily = px.line(
