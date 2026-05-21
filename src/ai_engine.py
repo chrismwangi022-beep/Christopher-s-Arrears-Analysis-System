@@ -1,84 +1,216 @@
-from google import genai
+"""
+Spread Capital Limited — AI Arrears Intelligence Engine
+src/ai_engine.py
+
+Fast, lightweight AI insights engine for Streamlit dashboards.
+Optimized for:
+- Fast Gemini responses
+- Background threading compatibility
+- Clean dashboard-ready markdown
+- Kenyan microfinance arrears analysis
+"""
+
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Any
+import json
+
 import streamlit as st
+from google import genai
 
 
-client = genai.Client(
-    api_key=st.secrets["GEMINI_API_KEY"]
-)
+# ─────────────────────────────────────────────
+# MODEL CONFIG
+# ─────────────────────────────────────────────
+
+MODEL_NAME = "gemini-2.5-flash"
 
 
-@st.cache_data(ttl=1800)
-def generate_ai_insights(metrics):
+# ─────────────────────────────────────────────
+# SYSTEM PROMPT
+# ─────────────────────────────────────────────
 
-    prompt = f"""
-##############################################################
+SYSTEM_PROMPT = """
 SPREAD CAPITAL LIMITED — ARREARS AI ENGINE
-Role: Senior Credit Risk Analyst (Nairobi)
-Mode: FAST EXECUTION DASHBOARD MODE
-##############################################################
 
-You are a credit risk intelligence engine for a microfinance portfolio in Kenya.
+ROLE:
+Senior Microfinance Credit Risk Analyst (Kenya)
 
-Your job:
-→ Convert arrears data into short, decision-ready insights
-→ Think like a risk dashboard, NOT a report writer
+MODE:
+Fast Execution Dashboard Mode
 
-OUTPUT RULE:
-- Very short, structured, scannable
-- No paragraphs
-- No storytelling
-- No repetition
-- No explanations
+YOUR JOB:
+Convert arrears portfolio metrics into:
+- short
+- precise
+- decision-ready insights
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-OUTPUT FORMAT (STRICT)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+DO NOT:
+- write reports
+- narrate
+- explain excessively
+- repeat insights
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+OUTPUT FORMAT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 📊 Portfolio Snapshot
-- 2 bullets max: total arrears (KES), PAR %, trend
-- Mention key driving branches only
-- End with status:
-  🟢 Healthy | 🟡 Watchlist | 🔴 Critical
+- Max 2 bullets
+- Mention:
+  total arrears
+  PAR %
+  trend
+  key affected branches
 
-⚠️ Key Risks (max 3)
-- Risk + impact + branch/officer/segment
-- Be specific and operational
+- End with:
+  🟢 Healthy
+  🟡 Watchlist
+  🔴 Critical
 
-🏢 Branch Insights (top 3 only)
-Branch → issue → trend (↑ ↓ →)
+⚠️ Key Risks
+- Max 3 bullets
+- Risk + impact + branch/officer
 
-👤 Officer Flags (max 5)
-Branch → Officer → issue (one line)
+🏢 Branch Insights
+- Top 3 affected branches only
+- Format:
+  Branch → issue → trend
 
-💡 Recommendations (max 3)
-- Action + owner + urgency
+👤 Officer Flags
+- Only risky officers
+- Format:
+  Branch → Officer → issue
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+💡 Recommendations
+- Max 3 actions
+- Operational only
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
 RULES
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-- No invented numbers
-- Only use data provided
-- No hedging words (may, could, might)
-- Trend arrows only: ↑ ↓ →
-- Severity only if needed: 🔴 🟡 🟢
-- Each line = 1 insight max
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-CURRENCY RULE (HARD):
-- All money MUST be in KES format: KES X,XXX
-- Never use USD/EUR/GBP
-- Never convert currency
+- No paragraphs
+- No storytelling
+- No invented numbers
+- Keep every insight short
+- Use trend arrows only:
+  ↑ worsening
+  ↓ improving
+  → stable
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CURRENCY RULE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+- ALL money values MUST use:
+  KES X,XXX
+
+- NEVER use:
+  USD
+  EUR
+  GBP
+  KSh
+  Ksh
+
+- Never convert currencies
 - If missing, assume KES
 
-STYLE:
-- Clean banking dashboard
-- Minimal emojis only:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+STYLE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+- Clean banking dashboard style
+- Minimal professional emojis only:
   📊 ⚠️ 🏢 👤 💡
-- Think: fast credit risk terminal
-############################################################## """
 
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=prompt
-    )
+- Think:
+  executive risk terminal
+"""
 
-    return response.text
+
+# ─────────────────────────────────────────────
+# METRICS CLEANER
+# ─────────────────────────────────────────────
+
+def _clean_metrics(obj: Any) -> Any:
+    """
+    Clean metrics for JSON serialization.
+    Handles:
+    - numpy types
+    - pandas timestamps
+    - nested dicts/lists
+    """
+
+    try:
+        import numpy as np
+
+        if isinstance(obj, np.integer):
+            return int(obj)
+
+        if isinstance(obj, np.floating):
+            return round(float(obj), 2)
+
+    except Exception:
+        pass
+
+    if hasattr(obj, "isoformat"):
+        return obj.isoformat()
+
+    if isinstance(obj, dict):
+        return {str(k): _clean_metrics(v) for k, v in obj.items()}
+
+    if isinstance(obj, (list, tuple)):
+        return [_clean_metrics(i) for i in obj]
+
+    return obj
+
+
+# ─────────────────────────────────────────────
+# FORMAT METRICS
+# ─────────────────────────────────────────────
+
+def format_metrics(metrics: dict[str, Any]) -> str:
+
+    cleaned = _clean_metrics(metrics)
+
+    cleaned["report_context"] = {
+        "company": "Spread Capital Limited",
+        "country": "Kenya",
+        "currency": "KES",
+        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+    }
+
+    return json.dumps(cleaned, indent=2)
+
+
+# ─────────────────────────────────────────────
+# MAIN AI FUNCTION
+# ─────────────────────────────────────────────
+
+def generate_ai_insights(metrics: dict[str, Any]) -> str:
+    """
+    Generate AI portfolio insights.
+
+    Returns markdown string.
+    Never raises errors to UI.
+    """
+
+    try:
+
+        # ── Gemini client ────────────────────
+        client = genai.Client(
+            api_key=st.secrets["GEMINI_API_KEY"]
+        )
+
+        # ── Prepare metrics ──────────────────
+        metrics_json = format_metrics(metrics)
+
+        # ── User prompt ──────────────────────
+        prompt = f"""
+Analyse the following arrears portfolio data.
+
+DATA:
+```json
+{metrics_json}
