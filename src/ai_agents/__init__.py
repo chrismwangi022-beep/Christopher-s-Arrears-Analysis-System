@@ -16,7 +16,7 @@ from .branch_agent import BRANCH_AGENT_SYSTEM_PROMPT, BRANCH_PERFORMANCE_ANALYST
 from .risk_agent import RISK_ANALYSIS_AGENT_PROMPT
 from .recovery_agent import RECOVERY_STRATEGY_AGENT_PROMPT
 
-MODEL_NAME = "gemini-2.5-flash"
+MODEL_NAME = "gemini-2.0-flash"
 
 def _call_gemini(data: dict[str, Any], system_prompt: str) -> str:
     """Private shared runner to execute AI interpretation without logic duplication."""
