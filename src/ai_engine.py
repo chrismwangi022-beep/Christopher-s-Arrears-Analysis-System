@@ -1,4 +1,4 @@
-```python
+
 """
 Spread Capital Limited — AI Arrears Intelligence Engine
 src/ai_engine.py
@@ -310,4 +310,3 @@ RULES:
 
 > Portfolio metrics above remain available.
 """
-```
