@@ -27,7 +27,7 @@ from google import genai
 # MODEL CONFIG
 # ─────────────────────────────────────────────
 
-MODEL_NAME = "gemini-1.5-flash"
+MODEL_NAME = "gemini-2.5-flash"
 
 
 # ─────────────────────────────────────────────
