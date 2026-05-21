@@ -16,6 +16,8 @@ Features:
 from __future__ import annotations
 
 import json
+import time
+import random
 from datetime import datetime
 from typing import Any
 
@@ -36,22 +38,54 @@ from .ai_agents import (
 # MODEL CONFIG
 # ─────────────────────────────────────────────
 
-MODEL_NAME = "gemini-2.5-flash"
+MODEL_FALLBACK_ORDER = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
 ORCHESTRATOR_DIRECTIVE = "Interpret the provided JSON data according to your analytical persona. Provide the structured executive summary now."
-
+MAX_RETRIES = 2
+INITIAL_BACKOFF = 2  # seconds
 
 # Global Client to prevent redundant instantiation
 if "genai_client" not in st.session_state:
     st.session_state.genai_client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 
 def _execute_agent_call(data: dict, system_prompt: str) -> str:
-    """Unified production runner for all AI agents."""
+    """
+    Unified production runner for all AI agents with model fallback and exponential backoff.
+    """
     metrics_json = format_metrics(data)
-    response = st.session_state.genai_client.models.generate_content(
-        model=MODEL_NAME,
-        contents=[system_prompt, f"DATA:\n{metrics_json}"]
-    )
-    return response.text.strip()
+    last_error = ""
+
+    for model_name in MODEL_FALLBACK_ORDER:
+        for attempt in range(MAX_RETRIES + 1):
+            try:
+                response = st.session_state.genai_client.models.generate_content(
+                    model=model_name,
+                    contents=[system_prompt, f"DATA:\n{metrics_json}"]
+                )
+                if response and response.text:
+                    return response.text.strip()
+                
+            except Exception as e:
+                err_msg = str(e).lower()
+                last_error = str(e)
+                
+                # Check for quota or rate limit errors
+                is_quota_issue = any(x in err_msg for x in ["429", "resource_exhausted", "quota exceeded"])
+                
+                if is_quota_issue:
+                    if attempt < MAX_RETRIES:
+                        # Exponential backoff with jitter
+                        sleep_time = (INITIAL_BACKOFF ** attempt) + random.uniform(0, 1)
+                        time.sleep(sleep_time)
+                        continue
+                    else:
+                        # Max retries reached for this model, fall back to next model
+                        break
+                else:
+                    # Unrecoverable error (e.g. auth, malformed prompt), stop immediately
+                    return f"⚠️ Analysis Error: {last_error}"
+
+    return f"🛡️ AI Service Temporarily Busy: The system encountered a high load. Please try again in a few moments. (Technical Detail: {last_error})"
+
 
 def run_multi_agent_analysis(data: dict[str, Any]) -> dict[str, str]:
     """
