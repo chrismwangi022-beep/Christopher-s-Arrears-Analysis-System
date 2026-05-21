@@ -38,7 +38,7 @@ from .ai_agents import (
 # MODEL CONFIG
 # ─────────────────────────────────────────────
 
-MODEL_FALLBACK_ORDER = ["gemini-2.5-flash", "gemini-2.0-flash-lite", "gemini-1.5-pro"]
+MODEL_FALLBACK_ORDER = ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-flash"]
 ORCHESTRATOR_DIRECTIVE = "Interpret the provided JSON data according to your analytical persona. Provide the structured executive summary now."
 MAX_RETRIES = 2
 INITIAL_BACKOFF = 2  # seconds
