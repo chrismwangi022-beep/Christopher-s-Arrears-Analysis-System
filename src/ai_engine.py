@@ -1,20 +1,23 @@
+```python
 """
 Spread Capital Limited — AI Arrears Intelligence Engine
 src/ai_engine.py
 
-Fast, lightweight AI insights engine for Streamlit dashboards.
-Optimized for:
-- Fast Gemini responses
-- Background threading compatibility
-- Clean dashboard-ready markdown
-- Kenyan microfinance arrears analysis
+Fast + lightweight Gemini AI engine for Streamlit dashboards.
+
+Features:
+- Fast execution
+- Clean dashboard insights
+- Kenyan microfinance risk analysis
+- Streamlit-safe
+- Concise executive intelligence
 """
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from typing import Any
-import json
 
 import streamlit as st
 from google import genai
@@ -131,14 +134,14 @@ STYLE
 
 
 # ─────────────────────────────────────────────
-# METRICS CLEANER
+# CLEAN METRICS
 # ─────────────────────────────────────────────
 
 def _clean_metrics(obj: Any) -> Any:
     """
-    Clean metrics for JSON serialization.
+    Cleans metrics for JSON serialization.
     Handles:
-    - numpy types
+    - numpy values
     - pandas timestamps
     - nested dicts/lists
     """
@@ -155,12 +158,18 @@ def _clean_metrics(obj: Any) -> Any:
     except Exception:
         pass
 
+    # datetime / pandas timestamp
     if hasattr(obj, "isoformat"):
         return obj.isoformat()
 
+    # dictionaries
     if isinstance(obj, dict):
-        return {str(k): _clean_metrics(v) for k, v in obj.items()}
+        return {
+            str(k): _clean_metrics(v)
+            for k, v in obj.items()
+        }
 
+    # lists / tuples
     if isinstance(obj, (list, tuple)):
         return [_clean_metrics(i) for i in obj]
 
@@ -172,6 +181,9 @@ def _clean_metrics(obj: Any) -> Any:
 # ─────────────────────────────────────────────
 
 def format_metrics(metrics: dict[str, Any]) -> str:
+    """
+    Convert metrics dictionary into clean JSON string.
+    """
 
     cleaned = _clean_metrics(metrics)
 
@@ -186,31 +198,116 @@ def format_metrics(metrics: dict[str, Any]) -> str:
 
 
 # ─────────────────────────────────────────────
-# MAIN AI FUNCTION
+# GENERATE AI INSIGHTS
 # ─────────────────────────────────────────────
 
 def generate_ai_insights(metrics: dict[str, Any]) -> str:
     """
     Generate AI portfolio insights.
 
-    Returns markdown string.
-    Never raises errors to UI.
+    Parameters
+    ----------
+    metrics : dict
+        Portfolio metrics dictionary
+
+    Returns
+    -------
+    str
+        Markdown dashboard insights
     """
 
     try:
 
-        # ── Gemini client ────────────────────
+        # ─────────────────────────────────────
+        # Gemini Client
+        # ─────────────────────────────────────
+
         client = genai.Client(
             api_key=st.secrets["GEMINI_API_KEY"]
         )
 
-        # ── Prepare metrics ──────────────────
+        # ─────────────────────────────────────
+        # Prepare Metrics
+        # ─────────────────────────────────────
+
         metrics_json = format_metrics(metrics)
 
-        # ── User prompt ──────────────────────
+        # ─────────────────────────────────────
+        # Build Prompt
+        # ─────────────────────────────────────
+
         prompt = f"""
-Analyse the following arrears portfolio data.
+You are a senior microfinance credit risk analyst.
+
+Analyse the arrears portfolio data below.
 
 DATA:
-```json
 {metrics_json}
+
+Generate concise dashboard insights.
+
+FORMAT:
+
+📊 Portfolio Snapshot
+- Max 2 bullets
+
+⚠️ Key Risks
+- Max 3 bullets
+
+🏢 Branch Insights
+- Top 3 branches only
+
+👤 Officer Flags
+- Risk officers only
+
+💡 Recommendations
+- Max 3 actions
+
+RULES:
+- No paragraphs
+- No storytelling
+- No invented numbers
+- Use KES only
+- Keep output concise
+"""
+
+        # ─────────────────────────────────────
+        # Generate AI Response
+        # ─────────────────────────────────────
+
+        response = client.models.generate_content(
+            model=MODEL_NAME,
+            contents=[
+                SYSTEM_PROMPT,
+                prompt
+            ]
+        )
+
+        result = response.text.strip()
+
+        # ─────────────────────────────────────
+        # Footer
+        # ─────────────────────────────────────
+
+        footer = f"""
+
+---
+
+<sub>
+🤖 Spread Capital AI Engine · Gemini Flash ·
+{datetime.now().strftime("%Y-%m-%d %H:%M")}
+</sub>
+"""
+
+        return result + footer
+
+    except Exception as e:
+
+        return f"""
+> ⚠️ **AI Insights Unavailable**
+
+> {str(e)}
+
+> Portfolio metrics above remain available.
+"""
+```
