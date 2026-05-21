@@ -387,19 +387,15 @@ def main():
     
     col1, col2, col3, col4, col5 = st.columns(5)
     
-    total_arrears = df_display['Arrears'].sum()
-    total_portfolio = df_display['Principle'].sum() if 'Principle' in df_display.columns else df_display['TotalBalance'].sum()
-    accounts_in_arrears = len(df_display[df_display['Days'].notna() & (df_display['Days'] > 0)])
-    avg_days = df_display[df_display['Days'].notna() & (df_display['Days'] > 0)]['Days'].mean() or 0
-    par_percentage = calculate_par_percentage(df_display)
+    # Enforce Architectural Rule: Move all KPI math to src/calculations.py
+    metrics = get_standard_metrics_package(df_display, df)
     
-    metrics = {
-        "total_arrears": round(total_arrears, 2),
-        "total_portfolio": round(total_portfolio, 2),
-        "accounts_in_arrears": int(accounts_in_arrears),
-        "average_days_past_due": round(avg_days, 1),
-        "par_percentage": round(par_percentage, 2),
-    }
+    total_arrears = metrics["total_arrears"]
+    total_portfolio = metrics["total_portfolio"]
+    accounts_in_arrears = metrics["accounts_in_arrears"]
+    avg_days = metrics["average_days_past_due"]
+    par_percentage = metrics["par_percentage"]
+
     # 1. Total Arrears
     with col1:
         st.markdown(f"""
@@ -446,47 +442,6 @@ def main():
         """, unsafe_allow_html=True)
     
     st.markdown("---")
-
-    alerts = []
-    if par_percentage > 10:
-        alerts.append("PAR exceeds acceptable threshold.")
-
-    if avg_days > 45:
-        alerts.append("Average delinquency period is increasing.")
-
-    if total_arrears > 5000000:
-        alerts.append("Total arrears exposure is critically high.")
-
-    metrics["alerts"] = alerts
-
-    officer_summary = (
-        df_display.groupby("Loan_Officer")["Arrears"]
-        .sum()
-        .sort_values(ascending=False)
-        .head(10)
-        .to_dict()
-    )
-
-    metrics["officer_summary"] = officer_summary
-
-    branch_summary = (
-        df_display.groupby("Branch")["Arrears"]
-        .sum()
-        .sort_values(ascending=False)
-        .head(5)
-        .to_dict()
-    )
-
-    metrics["top_branch_arrears"] = branch_summary
-
-    recent_trend = (
-        df.groupby("Report_Date")["Arrears"]
-        .sum()
-        .tail(7)
-        .to_dict()
-    )
-
-    metrics["recent_trend"] = recent_trend
 
     st.subheader("🤖 AI Portfolio Insights")
 

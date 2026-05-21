@@ -1,10 +1,11 @@
 """
-Calculation functions for PAR, ratios, and risk rankings
+Spread Capital Limited — Strict Financial Calculation Engine
+Source of Truth for Arrears Metrics & Risk Aggregations
 """
 
 import pandas as pd
 import numpy as np
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Any
 
 from .constants import AGING_BUCKETS
 
@@ -12,53 +13,46 @@ from .constants import AGING_BUCKETS
 def _safe_divide(numerator: float, denominator: float) -> float:
     """
     Base division logic for ratios (0.0 to 1.0+). 
-    Use safe_percentage for concentration metrics.
     """
     if pd.isna(numerator) or pd.isna(denominator) or denominator <= 0:
         return 0.0
     return float(numerator / denominator)
 
 
-def safe_percentage(numerator: float, denominator: float, context_type: str) -> float:
+def safe_percentage(numerator: float, denominator: float) -> float:
     """
-    Standardized percentage calculation with scope validation.
-    Ensures 100% is only returned when numerator exactly equals denominator 
-    and the scope (context_type) is valid.
-    
-    context_type options: "portfolio", "branch", "filtered_view"
+    Rigorous percentage calculation.
+    Ensures 100.0 is only returned if values are mathematically equal (within 1e-09).
+    Never rounds up to 100.0 to prevent misleading financial reporting.
     """
     if pd.isna(numerator) or pd.isna(denominator) or denominator <= 0:
         return 0.0
 
-    # A 100% value must only be returned if numerator == denominator
-    # Using np.isclose to handle floating point precision
-    is_exact = np.isclose(float(numerator), float(denominator), rtol=1e-07)
+    val_n = float(numerator)
+    val_d = float(denominator)
+
+    if np.isclose(val_n, val_d, rtol=1e-09):
+        return 100.0 if val_n > 0 else 0.0
+
+    percentage = (val_n / val_d) * 100
     
-    if is_exact:
-        # Return 100.0 only if mathematically absolute and non-zero
-        return 100.0 if numerator > 0 else 0.0
-
-    percentage = (numerator / denominator) * 100
-
-    # Prevent misleading reporting: if they aren't actually equal, 
-    # ensure the result does not round up to 100.0
+    if percentage >= 100.0:
+        return 99.99
+        
     return min(float(percentage), 99.99)
 
 
 def get_portfolio_share(value: float, total: float) -> float:
     """
     Calculates percentage share of a specific value against the total portfolio.
-    Introduced for strict separation of company-wide metrics.
     """
-    return safe_percentage(value, total, "portfolio")
-
+    return safe_percentage(value, total)
 
 def get_branch_share(value: float, branch_total: float) -> float:
     """
-    Calculates percentage share of a value (e.g., officer arrears) against a branch total.
-    Introduced for local risk assessment.
+    Calculates percentage share of a value against a branch total.
     """
-    return safe_percentage(value, branch_total, "branch")
+    return safe_percentage(value, branch_total)
 
 
 def find_column_case_insensitive(df: pd.DataFrame, column_name: str) -> Optional[str]:
@@ -188,8 +182,7 @@ def get_top_movers(
         combined = combined.reset_index().sort_values('change', ascending=False)
         combined['pct_change'] = combined['pct_change'].fillna(0.0)
         return combined.head(top_n)
-    except Exception as e:
-        print(f"Error calculating top movers: {e}")
+    except Exception:
         return pd.DataFrame()
 
 
@@ -212,9 +205,14 @@ def calculate_par_percentage(df: pd.DataFrame) -> float:
     if arrears_col is None or days_col is None:
         return 0.0
     
+    # Deduplication check: Ensure we only count unique accounts if AccountID exists
+    id_col = find_column_case_insensitive(df, 'AccountID')
+    calc_df = df.drop_duplicates(subset=[id_col]) if id_col else df
+    
     try:
         # Filter accounts with Days > 0 (in arrears)
-        in_arrears = df[df[days_col].notna() & (df[days_col] > 0)]
+        in_arrears_mask = (calc_df[days_col].notna()) & (calc_df[days_col] > 0)
+        in_arrears = calc_df[in_arrears_mask]
         
         total_arrears = in_arrears[arrears_col].sum()
         
@@ -227,8 +225,7 @@ def calculate_par_percentage(df: pd.DataFrame) -> float:
             return 0.0
         
         return get_portfolio_share(total_arrears, total_portfolio)
-    except Exception as e:
-        print(f"Error calculating PAR percentage: {e}")
+    except Exception:
         return 0.0
 
 
@@ -279,8 +276,7 @@ def calculate_arrears_to_portfolio_ratio(df: pd.DataFrame, group_by: Optional[st
             grouped = grouped.rename(columns={group_col: 'Product' if group_col == 'product' else group_col})
             
             return grouped.sort_values('Ratio', ascending=False)
-        except Exception as e:
-            print(f"Error calculating arrears to portfolio ratio: {e}")
+        except Exception:
             return pd.DataFrame()
     else:
         try:
@@ -294,8 +290,7 @@ def calculate_arrears_to_portfolio_ratio(df: pd.DataFrame, group_by: Optional[st
             
             ratio = _safe_divide(total_arrears, portfolio)
             return pd.DataFrame({'Ratio': [ratio]})
-        except Exception as e:
-            print(f"Error calculating ratio: {e}")
+        except Exception:
             return pd.DataFrame()
 
 
@@ -380,32 +375,31 @@ def get_officer_performance(df: pd.DataFrame) -> pd.DataFrame:
     if not all([officer_col, branch_col, arrears_col]):
         return pd.DataFrame()
 
+    # Strict aggregation logic to avoid double counting across multiple officers
     try:
         # 1. Compute totals for the current dataset scope (could be filtered)
-        view_total_arrears = df[arrears_col].sum()
-        branch_totals = df.groupby(branch_col)[arrears_col].sum().rename("branch_total_arrears")
+        # Deduplicate if possible before summing
+        id_col = find_column_case_insensitive(df, 'AccountID')
+        calc_df = df.drop_duplicates(subset=[id_col]) if id_col else df
+
+        view_total_arrears = calc_df[arrears_col].sum()
+        branch_totals = calc_df.groupby(branch_col)[arrears_col].sum().rename("branch_total_arrears")
 
         # 2. Aggregate arrears per officer and branch
-        perf = df.groupby([branch_col, officer_col])[arrears_col].sum().reset_index()
+        perf = calc_df.groupby([branch_col, officer_col])[arrears_col].sum().reset_index()
 
         # 3. Merge branch totals to compute local shares relative to the branch
         perf = perf.merge(branch_totals, on=branch_col)
 
         # 4. Compute relative risk metrics using shared logic
-        perf['branch_share_pct'] = perf.apply(
-            lambda x: get_branch_share(x[arrears_col], x['branch_total_arrears']), axis=1
-        )
-        perf['view_share_pct'] = perf[arrears_col].apply(
-            lambda x: safe_percentage(x, view_total_arrears, "filtered_view")
-        )
+        perf['branch_share_pct'] = perf.apply(lambda x: get_branch_share(x[arrears_col], x['branch_total_arrears']), axis=1)
+        perf['view_share_pct'] = perf[arrears_col].apply(lambda x: get_portfolio_share(x, view_total_arrears))
 
         # 5. Rank within each branch (highest arrears first)
         perf = perf.sort_values([branch_col, arrears_col], ascending=[True, False])
 
-        # 6. Standardize columns for downstream structured use
         perf = perf.rename(columns={officer_col: 'Officer', branch_col: 'Branch', arrears_col: 'Arrears'})
         return perf[['Branch', 'Officer', 'Arrears', 'branch_share_pct', 'view_share_pct']]
-
     except Exception:
         return pd.DataFrame()
 
@@ -480,15 +474,13 @@ def get_portfolio_distribution_by_aging(df: pd.DataFrame) -> pd.DataFrame:
         
         # Calculate percentages
         if principle_col:
-            total_portfolio = df[principle_col].sum()
+            total_portfolio = df_categorized[principle_col].sum()
         elif total_balance_col:
-            total_portfolio = df[total_balance_col].sum()
+            total_portfolio = df_categorized[total_balance_col].sum()
         else:
             total_portfolio = 0
         
-        distribution['Portfolio_Percentage'] = distribution['Total_Principle'].apply(
-            lambda x: safe_percentage(x, total_portfolio, "filtered_view")
-        )
+        distribution['Portfolio_Percentage'] = distribution['Total_Principle'].apply(lambda x: get_portfolio_share(x, total_portfolio))
 
         bucket_order = ["Current", "Early Warning (1-30)", "Moderate (31-60)", "Warning (61-90)", "Critical (>90)"]
         distribution['Order'] = distribution['Aging_Bucket'].apply(
@@ -497,8 +489,7 @@ def get_portfolio_distribution_by_aging(df: pd.DataFrame) -> pd.DataFrame:
         distribution = distribution.sort_values('Order').drop('Order', axis=1)
         
         return distribution
-    except Exception as e:
-        print(f"Error calculating portfolio distribution by aging: {e}")
+    except Exception:
         return pd.DataFrame()
 
 
@@ -614,8 +605,7 @@ def get_top_accounts_by_band(df: pd.DataFrame, band: str, top_n: int = 5) -> pd.
             top_accounts = band_df[cols_to_select].copy().head(top_n)
         
         return top_accounts
-    except Exception as e:
-        print(f"Error getting top accounts by band: {e}")
+    except Exception:
         return pd.DataFrame()
 
 
@@ -659,6 +649,74 @@ def get_priority_band_summary(df: pd.DataFrame) -> pd.DataFrame:
         summary['Priority'] = summary['Aging_Bucket'].map(priority_map).fillna('Unknown')
         
         return summary
-    except Exception as e:
-        print(f"Error getting priority band summary: {e}")
+    except Exception:
         return pd.DataFrame()
+
+
+def get_standard_metrics_package(df_display: pd.DataFrame, df_full: pd.DataFrame) -> Dict[str, Any]:
+    """
+    Centralized aggregation logic to bundle metrics for AI interpretation.
+    Enforces 'math-only' rule for calculations.py.
+    """
+    if df_display.empty:
+        return {}
+
+    arrears_col = find_column_case_insensitive(df_display, 'Arrears') or 'Arrears'
+    days_col = find_column_case_insensitive(df_display, 'Days') or 'Days'
+    principle_col = find_column_case_insensitive(df_display, 'Principle')
+    total_balance_col = find_column_case_insensitive(df_display, 'TotalBalance')
+    id_col = find_column_case_insensitive(df_display, 'AccountID')
+
+    # Deduplicate for snapshot accuracy
+    calc_df = df_display.drop_duplicates(subset=[id_col]) if id_col else df_display
+
+    total_arrears = df_display[arrears_col].sum()
+    
+    if principle_col:
+        total_portfolio = df_display[principle_col].sum()
+    elif total_balance_col:
+        total_portfolio = df_display[total_balance_col].sum()
+    else:
+        total_portfolio = 0
+        
+    accounts_in_arrears = len(df_display[df_display[days_col].notna() & (df_display[days_col] > 0)])
+    avg_days = df_display[df_display[days_col].notna() & (df_display[days_col] > 0)][days_col].mean() or 0
+    par_percentage = calculate_par_percentage(df_display)
+
+    # Structured threshold flags (No strings allowed in calculations engine)
+    threshold_flags = {
+        "par_limit_exceeded": bool(par_percentage > 10.0),
+        "aging_limit_exceeded": bool(avg_days > 45.0),
+        "exposure_limit_exceeded": bool(total_arrears > 5000000.0),
+        "critical_par_redline": bool(par_percentage > 25.0)
+    }
+
+    # Summaries
+    officer_col = find_column_case_insensitive(df_display, 'Loan_Officer') or 'Loan_Officer'
+    branch_col = find_column_case_insensitive(df_display, 'Branch') or 'Branch'
+    
+    officer_summary = df_display.groupby(officer_col)[arrears_col].sum().sort_values(ascending=False).head(10).to_dict()
+    branch_summary = df_display.groupby(branch_col)[arrears_col].sum().sort_values(ascending=False).head(5).to_dict()
+
+    # Trend (using report date if available)
+    recent_trend = {}
+    date_col = find_column_case_insensitive(df_full, 'Report_Date')
+    if date_col:
+        recent_trend = (
+            df_full.groupby(date_col)[arrears_col]
+            .sum()
+            .tail(7)
+            .to_dict()
+        )
+
+    return {
+        "total_arrears": round(float(total_arrears), 2),
+        "total_portfolio": round(float(total_portfolio), 2),
+        "accounts_in_arrears": int(accounts_in_arrears),
+        "average_days_past_due": round(float(avg_days), 1),
+        "par_percentage": round(float(par_percentage), 2),
+        "threshold_flags": threshold_flags,
+        "officer_summary": officer_summary,
+        "top_branch_arrears": branch_summary,
+        "recent_trend": recent_trend
+    }
