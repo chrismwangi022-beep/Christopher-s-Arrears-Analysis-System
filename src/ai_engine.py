@@ -66,8 +66,10 @@ def generate_local_insights(metrics: dict[str, Any]) -> dict[str, str]:
 
     # 1. Deterministic Status Logic
     status = "🟢 Healthy"
-    if par_pct >= 15 or avg_days > 60:
+    if par_pct >= 20 or avg_days > 60:
         status = "🔴 Critical"
+    elif par_pct >= 10:
+        status = "🟠 High Risk"
     elif par_pct >= 5 or avg_days > 30:
         status = "🟡 Watchlist"
 
@@ -106,9 +108,9 @@ def generate_local_insights(metrics: dict[str, Any]) -> dict[str, str]:
         branch_insights += f"- **Primary Exposure Hub:** {top_exposure['Branch'].title()} holds {top_exposure['Portfolio_Contribution']:.1%} of total arrears value.\n"
 
         # Identification of critical branches
-        critical_branches = [f"{b['Branch'].title()} ({b['Trend']})" for b in sorted_branches if b['Risk_Ratio'] >= 0.15]
+        critical_branches = [f"{b['Branch'].title()} ({b['Trend']})" for b in sorted_branches if b['Risk_Ratio'] >= 0.20]
         if critical_branches:
-            branch_insights += f"- **Elevated Delinquency Risk:** {', '.join(critical_branches)} exceed 15% critical threshold.\n"
+            branch_insights += f"- **Elevated Delinquency Risk:** {', '.join(critical_branches)} exceed 20% critical threshold.\n"
     else:
         branch_insights += "- No branch risk data available for the current selection.\n"
         

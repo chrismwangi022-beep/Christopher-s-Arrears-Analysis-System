@@ -6,7 +6,6 @@ Main Streamlit Application
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import sys
 import os
@@ -563,24 +562,19 @@ def main():
         # Arrears by Branch
         branch_totals = get_branch_arrears_summary(df_display)
         if not branch_totals.empty:
-            fig_branch = go.Figure(data=[
-                go.Bar(
-                    x=branch_totals.index,
-                    y=branch_totals.values,
-                    marker_color=COLORS['accent_cyan'],
-                    text=[f"{CURRENCY_SYMBOL} {val:,.0f}" for val in branch_totals.values],
-                    textposition='outside',
-                )
-            ])
+            fig_branch = px.bar(
+                x=branch_totals.index,
+                y=branch_totals.values,
+                text=[f"{CURRENCY_SYMBOL} {val:,.0f}" for val in branch_totals.values],
+                labels={'x': 'Branch', 'y': 'Arrears Amount'}
+            )
+            fig_branch.update_traces(marker_color=COLORS['accent_cyan'], textposition='outside')
             grand_total = branch_totals.sum()
             fig_branch.update_layout(
                 title=f"Arrears by Branch<br><sub>Grand Total Arrears: {CURRENCY_SYMBOL} {grand_total:,.0f}</sub>",
-                xaxis_title="Branch",
-                yaxis_title="Arrears Amount",
                 height=400,
                 dragmode='pan',
             )
-            st.plotly_chart(fig_branch, use_container_width=True, config={'scrollZoom': False})
     
     with col_chart2:
         # Arrears by Product - Pie chart (JENGA vs DUMISHA vs others)
@@ -616,22 +610,18 @@ def main():
             'Critical (>90)': COLORS['accent_red'],
             'Current': '#90EE90'
         }
-        colors = [color_map.get(bucket, COLORS['accent_cyan']) for bucket in aging_totals.index]
-        
-        fig_aging = go.Figure(data=[
-            go.Bar(
-                x=aging_totals.index,
-                y=aging_totals.values,
-                marker_color=colors,
-                text=[f"{CURRENCY_SYMBOL} {val:,.0f}" for val in aging_totals.values],
-                textposition='outside',
-            )
-        ])
+        fig_aging = px.bar(
+            x=aging_totals.index,
+            y=aging_totals.values,
+            text=[f"{CURRENCY_SYMBOL} {val:,.0f}" for val in aging_totals.values],
+            color=aging_totals.index,
+            color_discrete_map=color_map,
+            labels={'x': 'Aging Bucket', 'y': 'Arrears Amount'}
+        )
+        fig_aging.update_traces(textposition='outside')
         grand_total = aging_totals.sum()
         fig_aging.update_layout(
             title=f"Arrears by Aging Buckets<br><sub>Grand Total Arrears: {CURRENCY_SYMBOL} {grand_total:,.0f}</sub>",
-            xaxis_title="Aging Bucket",
-            yaxis_title="Arrears Amount",
             height=400,
             dragmode='pan',
         )
