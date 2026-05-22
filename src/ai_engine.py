@@ -123,9 +123,13 @@ def _execute_agent_call(data: dict, system_prompt: str) -> str:
         # Return an error signature that triggers generate_local_insights
         return "⚠️ AI Engine library missing from requirements.txt."
 
-    # Initialize client inside the session context to avoid AttributeErrors during module import
     if "genai_client" not in st.session_state:
-        st.session_state.genai_client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+        try:
+            from google import genai
+            st.session_state.genai_client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+        except Exception as e:
+            # If initialization fails, return error to trigger local fallback
+            return f"⚠️ API Initialization Error: {str(e)}"
 
     metrics_json = format_metrics(data)
     last_error = ""
@@ -245,13 +249,14 @@ def format_metrics(metrics: dict[str, Any]) -> str:
 def get_ai_health_state() -> dict[str, Any]:
     """Initializes and returns the AI health tracking state for the dashboard."""
     if "ai_health" not in st.session_state:
-        has_key = "GEMINI_API_KEY" in st.secrets
+        # Pre-flight check: Key must exist AND library must be installed
+        is_functional = HAS_GENAI and "GEMINI_API_KEY" in st.secrets
         st.session_state.ai_health = {
-            "status": "Online" if has_key else "Offline",
-            "is_local": not has_key,
+            "status": "Online" if is_functional else "Offline",
+            "is_local": not is_functional,
             "last_success": "N/A",
-            "model": "gemini-2.0-flash" if has_key else "Deterministic Engine",
-            "error": "" if has_key else "Missing API Credentials (GEMINI_API_KEY)"
+            "model": "gemini-2.0-flash" if is_functional else "Deterministic Engine",
+            "error": "" if is_functional else ("Library missing" if not HAS_GENAI else "Missing API Key")
         }
     return st.session_state.ai_health
 

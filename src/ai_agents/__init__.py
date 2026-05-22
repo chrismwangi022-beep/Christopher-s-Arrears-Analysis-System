@@ -9,7 +9,12 @@ No mathematical logic allowed.
 import json
 from typing import Any
 import streamlit as st
-from google import genai
+
+try:
+    from google import genai
+    HAS_GENAI = True
+except ImportError:
+    HAS_GENAI = False
 
 # Relative imports now resolve correctly within the ai_agents package
 from .branch_agent import BRANCH_AGENT_SYSTEM_PROMPT, BRANCH_PERFORMANCE_ANALYST_PROMPT
@@ -20,6 +25,9 @@ MODEL_NAME = "gemini-2.0-flash"
 
 def _call_gemini(data: dict[str, Any], system_prompt: str) -> str:
     """Private shared runner to execute AI interpretation without logic duplication."""
+    if not HAS_GENAI:
+        return "⚠️ AI Engine library missing from environment."
+        
     try:
         client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
         # Strictly JSON-in, String-out interpretation

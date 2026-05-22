@@ -269,8 +269,19 @@ def main():
     else:
         df_display = df_categorized
     
-    # AI Service Health Indicator
+    # --- AI Health Synchronizer ---
     ai_health = get_ai_health_state()
+    
+    # If we have existing results, verify if they are local to keep the badge honest
+    if st.session_state.get("ai_results"):
+        is_currently_local = any("(Local Analysis Mode)" in str(v) for v in st.session_state.ai_results.values())
+        if is_currently_local and ai_health["status"] == "Online":
+            ai_health.update({
+                "status": "Fallback",
+                "is_local": True,
+                "error": "Previous attempt triggered fallback."
+            })
+
     st.sidebar.markdown("---")
     st.sidebar.subheader("🤖 AI Service Health")
     
@@ -497,14 +508,14 @@ def main():
                 results = generate_ai_insights(metrics)
                 st.session_state.ai_results = results
                 
-                # Detection logic for health indicator
-                is_local = any("Local Analysis Mode" in str(v) for v in results.values())
+                # Detection: Check for the specific local mode string in any return value
+                is_local = any("(Local Analysis Mode)" in str(v) for v in results.values())
                 
                 if is_local:
                     ai_health.update({
                         "status": "Fallback" if "GEMINI_API_KEY" in st.secrets else "Offline",
                         "is_local": True,
-                        "error": "Quota exhaustion or API unavailable. Switched to rule engine."
+                        "error": "API Unreachable/Quota Exceeded. Running local logic."
                     })
                 else:
                     ai_health.update({
@@ -513,6 +524,10 @@ def main():
                         "error": "",
                         "last_success": datetime.now().strftime("%H:%M:%S")
                     })
+                
+                # Force a rerun so the sidebar badge updates immediately to match the new results
+                st.rerun()
+                
                 st.success("✅ Analysis Complete")
             except Exception as e:
                 ai_health.update({"status": "Offline", "error": str(e)})
