@@ -37,7 +37,7 @@ OUTPUT FORMAT
 
 📉 Local Arrears Drivers
 - Identify products or aging buckets driving the most risk in this branch.
-- Use trend indicators (↑ worsening, ↓ improving, → stable) based on input.
+- Use trend indicators (↑ worsening, ↓ improving, → stable).
 
 🎯 Action Plan (Immediate)
 - 3 specific recovery steps for the branch team.
@@ -65,16 +65,18 @@ CRITICAL CONSTRAINTS:
 - DO NOT provide recovery actions or suggestions.
 - NO invented numbers or metrics.
 - NO repetition of insights.
+- NEVER use the phrase "lowest arrears amount" to describe performance.
+- USE "lowest portfolio risk ratio" or "strongest portfolio quality".
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
 OUTPUT FORMAT
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 🏢 Branch Ranking
-- Ordered list of branches based on performance (PAR and Arrears).
+- Ordered list of branches based on Risk Ratio (Arrears/Principal).
 
-📊 Best Performing Branch
-- Name + primary reason based on data.
+📊 Strongest Portfolio Quality
+- Branch with the lowest risk ratio + data-driven reason.
 
 🔴 Worst Performing Branch
 - Name + primary reason based on data.

@@ -737,9 +737,27 @@ def get_standard_metrics_package(df_display: pd.DataFrame, df_full: pd.DataFrame
     # Summaries
     officer_col = find_column_case_insensitive(df_display, 'Loan_Officer') or 'Loan_Officer'
     branch_col = find_column_case_insensitive(df_display, 'Branch') or 'Branch'
-    
+
+    # Comprehensive Branch Risk Summary (All Branches)
+    portfolio_col = principle_col if principle_col else total_balance_col
+    if branch_col and arrears_col and portfolio_col:
+        branch_stats = df_display.groupby(branch_col).agg({
+            arrears_col: 'sum',
+            portfolio_col: 'sum',
+            days_col: 'mean'
+        }).reset_index()
+        branch_stats.columns = ['Branch', 'Arrears', 'Principal', 'Avg_Days']
+        branch_stats['Risk_Ratio'] = branch_stats.apply(lambda x: _safe_divide(x['Arrears'], x['Principal']), axis=1)
+        
+        total_arrears_val = branch_stats['Arrears'].sum()
+        branch_stats['Portfolio_Contribution'] = branch_stats['Arrears'].apply(lambda x: _safe_divide(x, total_arrears_val))
+        branch_stats['Classification'] = branch_stats['Risk_Ratio'].apply(classify_risk_ratio)
+        
+        branch_risk_summary = branch_stats.to_dict(orient='records')
+    else:
+        branch_risk_summary = []
+
     officer_summary = df_display.groupby(officer_col)[arrears_col].sum().sort_values(ascending=False).head(10).to_dict()
-    branch_summary = df_display.groupby(branch_col)[arrears_col].sum().sort_values(ascending=False).head(5).to_dict()
 
     # Trend (using report date if available)
     recent_trend = {}
@@ -760,6 +778,6 @@ def get_standard_metrics_package(df_display: pd.DataFrame, df_full: pd.DataFrame
         "par_percentage": round(float(par_percentage), 2),
         "risk_metrics": risk_metrics,
         "officer_summary": officer_summary,
-        "top_branch_arrears": branch_summary,
+        "branch_risk_summary": branch_risk_summary,
         "recent_trend": recent_trend
     }

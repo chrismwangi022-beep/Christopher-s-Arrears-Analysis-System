@@ -61,7 +61,7 @@ def generate_local_insights(metrics: dict[str, Any]) -> dict[str, str]:
     par_pct = metrics.get("par_percentage", 0)
     accounts = metrics.get("accounts_in_arrears", 0)
     avg_days = metrics.get("average_days_past_due", 0)
-    branch_summary = metrics.get("top_branch_arrears", {})
+    branch_risk_list = metrics.get("branch_risk_summary", [])
     officer_summary = metrics.get("officer_summary", {})
 
     # 1. Deterministic Status Logic
@@ -90,12 +90,21 @@ def generate_local_insights(metrics: dict[str, Any]) -> dict[str, str]:
 
     # 4. Branch & Officer Insights
     branch_insights = "🏢 Branch Insights\n"
-    top_branches = list(branch_summary.keys())[:3]
-    if top_branches:
-        for b in top_branches:
-            branch_insights += f"- {b.title()} → Concentration of KES {branch_summary[b]:,.0f}\n"
+    if branch_risk_list:
+        # Sort by Risk Ratio descending
+        sorted_branches = sorted(branch_risk_list, key=lambda x: x['Risk_Ratio'], reverse=True)
+        worst = sorted_branches[0]
+        best = sorted_branches[-1]
+
+        branch_insights += f"- **Worst Performing Branch:** {worst['Branch'].title()} (Risk Ratio: {worst['Risk_Ratio']:.2%})\n"
+        branch_insights += f"- **Strongest Portfolio Quality:** {best['Branch'].title()} (Lowest Risk Ratio: {best['Risk_Ratio']:.2%})\n"
+        
+        # Identification of critical branches
+        critical_branches = [b['Branch'].title() for b in sorted_branches if b['Risk_Ratio'] >= 0.15][:2]
+        if critical_branches:
+            branch_insights += f"- **Critical Concentration:** {', '.join(critical_branches)} exceed 15% risk threshold.\n"
     else:
-        branch_insights += "- No branch concentration data available.\n"
+        branch_insights += "- No branch risk data available for the current selection.\n"
         
     branch_insights += "\n👤 Officer Flags\n"
     top_officers = list(officer_summary.keys())[:3]
