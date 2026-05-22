@@ -298,8 +298,10 @@ def classify_risk_ratio(ratio: float) -> str:
     """
     Categorize performance based on arrears-to-principal ratio.
     """
-    if ratio >= 0.15:
+    if ratio >= 0.20:
         return "🔴 Critical"
+    if ratio >= 0.10:
+        return "🟠 High Risk"
     if ratio >= 0.05:
         return "🟡 Watchlist"
     return "🟢 Healthy"
