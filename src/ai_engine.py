@@ -43,6 +43,75 @@ ORCHESTRATOR_DIRECTIVE = "Interpret the provided JSON data according to your ana
 MAX_RETRIES = 2
 INITIAL_BACKOFF = 2  # seconds
 
+def generate_local_insights(metrics: dict[str, Any]) -> dict[str, str]:
+    """
+    Deterministic rule-based engine that mimics AI output style.
+    Ensures zero-failure UX when API quotas are exhausted.
+    """
+    total_arrears = metrics.get("total_arrears", 0)
+    par_pct = metrics.get("par_percentage", 0)
+    accounts = metrics.get("accounts_in_arrears", 0)
+    avg_days = metrics.get("average_days_past_due", 0)
+    branch_summary = metrics.get("top_branch_arrears", {})
+    officer_summary = metrics.get("officer_summary", {})
+
+    # 1. Deterministic Status Logic
+    status = "🟢 Healthy"
+    if par_pct >= 15 or avg_days > 60:
+        status = "🔴 Critical"
+    elif par_pct >= 5 or avg_days > 30:
+        status = "🟡 Watchlist"
+
+    # 2. Portfolio Snapshot (Mimicking Executive Summary)
+    summary = (
+        "📊 Portfolio Snapshot (Local Analysis Mode)\n"
+        f"- Portfolio exposure is **KES {total_arrears:,.2f}** with **{accounts:,}** active defaulters.\n"
+        f"- PAR is currently **{par_pct:.2f}%** with an aging average of **{avg_days:.1f} days**.\n\n"
+        f"- **Current Outlook:** {status}"
+    )
+
+    # 3. Risk Drivers
+    risks = "⚠️ Key Risks\n"
+    if par_pct > 10:
+        risks += f"- **High PAR**: Systemic risk detected with {par_pct}% of principal in arrears.\n"
+    if avg_days > 45:
+        risks += f"- **Stagnant Recovery**: High average days ({avg_days}) indicates slowing collection velocity.\n"
+    if not any([par_pct > 10, avg_days > 45]):
+        risks += "- No high-level systemic risks identified in the current selection.\n"
+
+    # 4. Branch & Officer Insights
+    branch_insights = "🏢 Branch Insights\n"
+    top_branches = list(branch_summary.keys())[:3]
+    if top_branches:
+        for b in top_branches:
+            branch_insights += f"- {b.title()} → Concentration of KES {branch_summary[b]:,.0f}\n"
+    else:
+        branch_insights += "- No branch concentration data available.\n"
+        
+    branch_insights += "\n👤 Officer Flags\n"
+    top_officers = list(officer_summary.keys())[:3]
+    if top_officers:
+        for off in top_officers:
+            branch_insights += f"- {off.title()} → Managing KES {officer_summary[off]:,.0f} in arrears\n"
+
+    # 5. Recommendations
+    rec = "💡 Recommendations\n"
+    if par_pct > 12:
+        rec += "- **Freeze**: Halt new disbursements for the worst-performing branches.\n"
+        rec += "- **Escalate**: Trigger immediate legal demand letters for accounts > 90 days.\n"
+    elif par_pct > 5:
+        rec += "- **Intensity**: Increase frequency of field visits to 'Warning' category clients.\n"
+        rec += "- **Review**: Audit payment plans for top 10 defaulters.\n"
+    else:
+        rec += "- **Monitor**: Continue low-touch SMS and automated call reminders.\n"
+
+    return {
+        "executive_summary": summary,
+        "risk": risks.strip(),
+        "recovery": rec.strip(),
+        "branch": branch_insights.strip()
+    }
+
 def _execute_agent_call(data: dict, system_prompt: str) -> str:
     """
     Unified production runner for all AI agents with model fallback and exponential backoff.
@@ -166,9 +235,27 @@ def format_metrics(metrics: dict[str, Any]) -> str:
 # GENERATE AI INSIGHTS
 # ─────────────────────────────────────────────
 
+@st.cache_data(ttl=600, show_spinner=False)
 def generate_ai_insights(metrics: dict[str, Any]) -> dict[str, str]:
     """
     Primary entry point for AI analytics.
-    Passes structured metrics unchanged to the orchestrator.
+    Implements a hybrid intelligence strategy with deterministic fallback.
     """
-    return run_multi_agent_analysis(metrics)
+    try:
+        # Early exit if API key is missing
+        if not st.secrets.get("GEMINI_API_KEY"):
+            return generate_local_insights(metrics)
+
+        # Attempt multi-agent AI analysis
+        results = run_multi_agent_analysis(metrics)
+        
+        # Detection: If any agent returns an error signature, trigger the fallback engine
+        # to ensure the UI remains clean and consistent.
+        if any(v.startswith(("⚠️", "🛡️")) for v in results.values()):
+            return generate_local_insights(metrics)
+            
+        return results
+        
+    except Exception:
+        # Absolute safety net: Switch to local insights on any failure
+        return generate_local_insights(metrics)
