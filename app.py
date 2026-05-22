@@ -345,13 +345,22 @@ def main():
                             repo_url = "github.com/chrismwangi022-beep/Christopher-s-Arrears-Analysis-System.git"
                             remote_url = f"https://{token.strip()}@{repo_url}"
 
+                            # Configure remote and reconcile divergent branches
+                            # (Caused by the Heartbeat Action creating remote commits)
+                            origin = repo.remote(name='origin')
+                            origin.set_url(remote_url)
+                            
+                            # Set strategy and user identity for the automated commit
+                            with repo.config_writer() as cw:
+                                cw.set_value("user", "name", "Spread Capital Admin")
+                                cw.set_value("user", "email", "admin@spreadcapital.com")
+                                cw.set_value("pull", "rebase", "true")
+                            
+                            origin.pull("main")
+
                             # 3. Add and Commit files
                             repo.index.add(["data/"])  # Adds all files in the data folder
                             repo.index.commit("Daily Arrears Update via Web Portal")
-
-                            # 4. Push to main
-                            origin = repo.remote(name='origin')
-                            origin.set_url(remote_url)
 
                             # Push to ensure the cloud version stays in sync
                             origin.push(refspec='HEAD:main')
