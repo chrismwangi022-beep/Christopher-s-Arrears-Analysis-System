@@ -294,124 +294,115 @@ def calculate_arrears_to_portfolio_ratio(df: pd.DataFrame, group_by: Optional[st
             return pd.DataFrame()
 
 
-def get_top_risk_branch(df: pd.DataFrame) -> Optional[Tuple[str, float]]:
-    """Get branch with highest total arrears."""
-    if df.empty:
-        return None
+def classify_risk_ratio(ratio: float) -> str:
+    """
+    Categorize performance based on arrears-to-principal ratio.
+    """
+    if ratio >= 0.15:
+        return "🔴 Critical"
+    if ratio >= 0.05:
+        return "🟡 Watchlist"
+    return "🟢 Healthy"
+
+
+def get_branch_performance(df: pd.DataFrame) -> pd.DataFrame:
+    """Calculates branch performance based on Risk Ratio (Arrears/Principal)."""
+    if df.empty: return pd.DataFrame()
     
-    branch_col = find_column_case_insensitive(df, 'Branch')
-    arrears_col = find_column_case_insensitive(df, 'Arrears')
-    
-    if branch_col is None or arrears_col is None:
-        return None
+    b_col = find_column_case_insensitive(df, 'Branch') or 'Branch'
+    a_col = find_column_case_insensitive(df, 'Arrears') or 'Arrears'
+    p_col = find_column_case_insensitive(df, 'Principle') or 'Principle'
     
     try:
-        branch_totals = df.groupby(branch_col)[arrears_col].sum().sort_values(ascending=False)
-        if branch_totals.empty:
-            return None
-        
-        top_branch = branch_totals.index[0]
-        top_amount = branch_totals.iloc[0]
-        return (top_branch, top_amount)
+        perf = df.groupby(b_col).agg({a_col: 'sum', p_col: 'sum'}).reset_index()
+        perf.columns = ['Branch', 'Arrears', 'Principal']
+        perf['Risk_Ratio'] = perf.apply(lambda x: _safe_divide(x['Arrears'], x['Principal']), axis=1)
+        perf['Classification'] = perf['Risk_Ratio'].apply(classify_risk_ratio)
+        return perf.sort_values('Risk_Ratio', ascending=False).reset_index(drop=True)
     except Exception:
-        return None
+        return pd.DataFrame()
 
 
-def get_top_risk_product(df: pd.DataFrame) -> Optional[Tuple[str, float]]:
-    """Get product with highest arrears-to-portfolio ratio."""
-    if df.empty:
-        return None
+def get_product_performance(df: pd.DataFrame) -> pd.DataFrame:
+    """Calculates product performance based on Risk Ratio (Arrears/Principal)."""
+    if df.empty: return pd.DataFrame()
     
-    product_col = find_column_case_insensitive(df, 'Product')
-    if product_col is None:
-        return None
+    pr_col = find_column_case_insensitive(df, 'Product') or 'Product'
+    a_col = find_column_case_insensitive(df, 'Arrears') or 'Arrears'
+    p_col = find_column_case_insensitive(df, 'Principle') or 'Principle'
     
     try:
-        product_ratios = calculate_arrears_to_portfolio_ratio(df, group_by=product_col)
-        if product_ratios.empty:
-            return None
-        
-        top_product = product_ratios.iloc[0]['Product']
-        top_ratio = product_ratios.iloc[0]['Ratio']
-        return (top_product, top_ratio)
-    except Exception:
-        return None
-
-
-def get_star_performers(df: pd.DataFrame, top_n: int = 5) -> pd.DataFrame:
-    """Get officers with lowest arrears-to-portfolio ratio (top performers)."""
-    if df.empty:
-        return pd.DataFrame()
-    
-    officer_col = find_column_case_insensitive(df, 'Loan_Officer')
-    if officer_col is None:
-        return pd.DataFrame()
-    
-    try:
-        officer_ratios = calculate_arrears_to_portfolio_ratio(df, group_by=officer_col)
-        if officer_ratios.empty:
-            return pd.DataFrame()
-        
-        # Sort ascending (lowest ratio = best performer)
-        officer_ratios = officer_ratios.sort_values('Ratio', ascending=True)
-        
-        return officer_ratios.head(top_n)
+        perf = df.groupby(pr_col).agg({a_col: 'sum', p_col: 'sum'}).reset_index()
+        perf.columns = ['Product', 'Arrears', 'Principal']
+        perf['Risk_Ratio'] = perf.apply(lambda x: _safe_divide(x['Arrears'], x['Principal']), axis=1)
+        perf['Classification'] = perf['Risk_Ratio'].apply(classify_risk_ratio)
+        return perf.sort_values('Risk_Ratio', ascending=False).reset_index(drop=True)
     except Exception:
         return pd.DataFrame()
 
 
 def get_officer_performance(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Identifies high-risk officers by computing relative shares within branch and portfolio.
-    Officers are ranked by arrears amount within their respective branches.
-    Returns: DataFrame [Branch, Officer, Arrears, branch_share_pct, view_share_pct]
+    Calculates officer performance based on Risk Ratio (Arrears/Principal).
+    Includes Branch context for organizational clarity.
     """
     if df.empty: return pd.DataFrame()
 
-    officer_col = find_column_case_insensitive(df, 'Loan_Officer')
-    branch_col = find_column_case_insensitive(df, 'Branch')
-    arrears_col = find_column_case_insensitive(df, 'Arrears')
+    o_col = find_column_case_insensitive(df, 'Loan_Officer') or 'Loan_Officer'
+    b_col = find_column_case_insensitive(df, 'Branch') or 'Branch'
+    a_col = find_column_case_insensitive(df, 'Arrears') or 'Arrears'
+    p_col = find_column_case_insensitive(df, 'Principle') or 'Principle'
 
-    if not all([officer_col, branch_col, arrears_col]):
-        return pd.DataFrame()
-
-    # Strict aggregation logic to avoid double counting across multiple officers
     try:
-        # 1. Compute totals for the current dataset scope (could be filtered)
-        # Deduplicate if possible before summing
-        id_col = find_column_case_insensitive(df, 'AccountID')
-        calc_df = df.drop_duplicates(subset=[id_col]) if id_col else df
-
-        view_total_arrears = calc_df[arrears_col].sum()
-        branch_totals = calc_df.groupby(branch_col)[arrears_col].sum().rename("branch_total_arrears")
-
-        # 2. Aggregate arrears per officer and branch
-        perf = calc_df.groupby([branch_col, officer_col])[arrears_col].sum().reset_index()
-
-        # 3. Merge branch totals to compute local shares relative to the branch
-        perf = perf.merge(branch_totals, on=branch_col)
-
-        # 4. Compute relative risk metrics using shared logic
-        perf['branch_share_pct'] = perf.apply(lambda x: get_branch_share(x[arrears_col], x['branch_total_arrears']), axis=1)
-        perf['view_share_pct'] = perf[arrears_col].apply(lambda x: get_portfolio_share(x, view_total_arrears))
-
-        # 5. Rank within each branch (highest arrears first)
-        perf = perf.sort_values([branch_col, arrears_col], ascending=[True, False])
-
-        perf = perf.rename(columns={officer_col: 'Officer', branch_col: 'Branch', arrears_col: 'Arrears'})
-        return perf[['Branch', 'Officer', 'Arrears', 'branch_share_pct', 'view_share_pct']]
+        perf = df.groupby([b_col, o_col]).agg({a_col: 'sum', p_col: 'sum'}).reset_index()
+        perf.columns = ['Branch', 'Officer', 'Arrears', 'Principal']
+        perf['Risk_Ratio'] = perf.apply(lambda x: _safe_divide(x['Arrears'], x['Principal']), axis=1)
+        perf['Classification'] = perf['Risk_Ratio'].apply(classify_risk_ratio)
+        return perf.sort_values('Risk_Ratio', ascending=False).reset_index(drop=True)
     except Exception:
         return pd.DataFrame()
 
 
 def get_officer_ranking_split(df: pd.DataFrame, n: int = 5) -> Tuple[pd.DataFrame, pd.DataFrame]:
-    """Splits officers into best and worst performers based on branch share."""
+    """Splits officers into best and worst performers based on Risk Ratio."""
     perf = get_officer_performance(df)
     if perf.empty:
         return pd.DataFrame(), pd.DataFrame()
-    best = perf.nsmallest(n, 'branch_share_pct')
-    worst = perf.nlargest(n, 'branch_share_pct')
+        
+    # Worst are those with highest Risk Ratio
+    worst = perf.nlargest(n, 'Risk_Ratio')
+    # Best are those with lowest Risk Ratio (excluding 0 if many exist)
+    best = perf.nsmallest(n, 'Risk_Ratio')
+    
     return best, worst
+
+
+def get_top_risk_branch(df: pd.DataFrame) -> Optional[Tuple[str, float]]:
+    """Get branch with highest Risk Ratio."""
+    perf = get_branch_performance(df)
+    if perf.empty:
+        return None
+    
+    top = perf.iloc[0]
+    return (top['Branch'], top['Risk_Ratio'])
+
+
+def get_top_risk_product(df: pd.DataFrame) -> Optional[Tuple[str, float]]:
+    """Get product with highest Risk Ratio."""
+    perf = get_product_performance(df)
+    if perf.empty:
+        return None
+    
+    top = perf.iloc[0]
+    return (top['Product'], top['Risk_Ratio'])
+
+
+def get_star_performers(df: pd.DataFrame, top_n: int = 5) -> pd.DataFrame:
+    """Get officers with lowest Risk Ratio."""
+    perf = get_officer_performance(df)
+    if perf.empty:
+        return pd.DataFrame()
+    return perf.nsmallest(top_n, 'Risk_Ratio').reset_index(drop=True)
 
 
 def categorize_by_aging(df: pd.DataFrame) -> pd.DataFrame:

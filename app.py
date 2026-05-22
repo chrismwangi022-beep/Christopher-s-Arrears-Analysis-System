@@ -746,34 +746,55 @@ def main():
     
     st.markdown("---")
     
-    # Performance Rankings & Insights
+    # 🎯 Performance Rankings & Insights
     st.subheader("🎯 Performance Rankings & Insights")
     
-    col_rank1, col_rank2 = st.columns(2)
-    
-    with col_rank1:
-        st.markdown("### Top Risk Branch")
+    # Global High-Risk Metrics
+    m_col1, m_col2, m_col3 = st.columns(3)
+    with m_col1:
         top_branch = get_top_risk_branch(df_display)
         if top_branch:
-            branch_name, branch_amount = top_branch
-            st.metric("Branch", branch_name.title(), f"{CURRENCY_SYMBOL} {branch_amount:,.0f}")
-        
-        st.markdown("### Top Risk Product")
+            st.metric("Highest Risk Branch", top_branch[0].title(), f"{top_branch[1]:.2%}")
+    with m_col2:
         top_product = get_top_risk_product(df_display)
         if top_product:
-            product_name, product_ratio = top_product
-            st.metric("Product", product_name, f"Ratio: {product_ratio:.2%}")
+            st.metric("Highest Risk Product", top_product[0], f"{top_product[1]:.2%}")
+    with m_col3:
+        st.metric("Overall Portfolio PAR", f"{calculate_par_percentage(df_display):.2f}%")
+
+    tab_branch, tab_officer = st.tabs(["🏢 Branch Rankings", "👤 Officer Rankings"])
     
-    with col_rank2:
-        st.markdown("### Officer Performance – Praise vs Improve")
-        best, worst = get_officer_ranking_split(df_display)
-        tab_best, tab_worst = st.tabs(["👏 Officers to Praise", "⚠️ Officers Needing Improvement"])
-        
-        with tab_best:
-            st.dataframe(best, use_container_width=True, hide_index=True)
-        
-        with tab_worst:
-            st.dataframe(worst, use_container_width=True, hide_index=True)
+    # Formatting configuration for tables
+    table_config = {
+        "Arrears": st.column_config.NumberColumn(format=f"{CURRENCY_SYMBOL} %,.0f"),
+        "Principal": st.column_config.NumberColumn(format=f"{CURRENCY_SYMBOL} %,.0f"),
+        "Risk_Ratio": st.column_config.NumberColumn("Ratio %", format="%.2%"),
+        "Classification": st.column_config.TextColumn("Status")
+    }
+
+    with tab_branch:
+        branch_perf = get_branch_performance(df_display)
+        if not branch_perf.empty:
+            st.markdown("#### 🔴 Worst Performing Branches (Highest Risk)")
+            st.dataframe(branch_perf.head(5), use_container_width=True, column_config=table_config, hide_index=True)
+            
+            st.markdown("#### 🟢 Best Performing Branches (Lowest Risk)")
+            st.dataframe(branch_perf.tail(5).sort_values('Risk_Ratio', ascending=True), use_container_width=True, column_config=table_config, hide_index=True)
+            
+            with st.expander("View Full Branch League Table"):
+                st.dataframe(branch_perf, use_container_width=True, column_config=table_config, hide_index=True)
+
+    with tab_officer:
+        officer_perf = get_officer_performance(df_display)
+        if not officer_perf.empty:
+            st.markdown("#### ⚠️ Officers Needing Intervention (Highest Risk)")
+            st.dataframe(officer_perf.head(5), use_container_width=True, column_config=table_config, hide_index=True)
+            
+            st.markdown("#### 👏 Top Performing Officers (Lowest Risk)")
+            st.dataframe(officer_perf.tail(5).sort_values('Risk_Ratio', ascending=True), use_container_width=True, column_config=table_config, hide_index=True)
+
+            with st.expander("View Full Officer League Table"):
+                st.dataframe(officer_perf, use_container_width=True, column_config=table_config, hide_index=True)
     
     # Dynamic Branch Insights
     if selected_branches and len(selected_branches) == 1:
