@@ -88,21 +88,27 @@ def generate_local_insights(metrics: dict[str, Any]) -> dict[str, str]:
     if not any([par_pct > 10, avg_days > 45]):
         risks += "- No high-level systemic risks identified in the current selection.\n"
 
-    # 4. Branch & Officer Insights
-    branch_insights = "🏢 Branch Insights\n"
+    # 4. Branch Portfolio Performance (Ratio-Based)
+    branch_insights = "🏢 Branch Portfolio Analysis\n"
     if branch_risk_list:
-        # Sort by Risk Ratio descending
+        # Performance Ranking (Portfolio Quality)
         sorted_branches = sorted(branch_risk_list, key=lambda x: x['Risk_Ratio'], reverse=True)
         worst = sorted_branches[0]
         best = sorted_branches[-1]
 
-        branch_insights += f"- **Worst Performing Branch:** {worst['Branch'].title()} (Risk Ratio: {worst['Risk_Ratio']:.2%})\n"
-        branch_insights += f"- **Strongest Portfolio Quality:** {best['Branch'].title()} (Lowest Risk Ratio: {best['Risk_Ratio']:.2%})\n"
+        branch_insights += "**A. Portfolio Performance Analysis**\n"
+        branch_insights += f"- **Highest Portfolio Risk Ratio:** {worst['Branch'].title()} ({worst['Risk_Ratio']:.2%}) — *{worst['Classification']}*\n"
+        branch_insights += f"- **Strongest Portfolio Quality:** {best['Branch'].title()} (Lowest Risk Ratio: {best['Risk_Ratio']:.2%}) — *{best['Classification']}*\n\n"
         
+        # Concentration Analysis (Exposure Share)
+        branch_insights += "**B. Arrears Concentration Analysis**\n"
+        top_exposure = sorted(branch_risk_list, key=lambda x: x['Arrears'], reverse=True)[0]
+        branch_insights += f"- **Primary Exposure Hub:** {top_exposure['Branch'].title()} holds {top_exposure['Portfolio_Contribution']:.1%} of total arrears value.\n"
+
         # Identification of critical branches
-        critical_branches = [b['Branch'].title() for b in sorted_branches if b['Risk_Ratio'] >= 0.15][:2]
+        critical_branches = [f"{b['Branch'].title()} ({b['Trend']})" for b in sorted_branches if b['Risk_Ratio'] >= 0.15]
         if critical_branches:
-            branch_insights += f"- **Critical Concentration:** {', '.join(critical_branches)} exceed 15% risk threshold.\n"
+            branch_insights += f"- **Elevated Delinquency Risk:** {', '.join(critical_branches)} exceed 15% critical threshold.\n"
     else:
         branch_insights += "- No branch risk data available for the current selection.\n"
         

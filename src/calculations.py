@@ -737,10 +737,12 @@ def get_standard_metrics_package(df_display: pd.DataFrame, df_full: pd.DataFrame
     # Summaries
     officer_col = find_column_case_insensitive(df_display, 'Loan_Officer') or 'Loan_Officer'
     branch_col = find_column_case_insensitive(df_display, 'Branch') or 'Branch'
+    date_col = find_column_case_insensitive(df_full, 'Report_Date')
 
     # Comprehensive Branch Risk Summary (All Branches)
     portfolio_col = principle_col if principle_col else total_balance_col
     if branch_col and arrears_col and portfolio_col:
+        # Aggregate main metrics
         branch_stats = df_display.groupby(branch_col).agg({
             arrears_col: 'sum',
             portfolio_col: 'sum',
@@ -752,7 +754,31 @@ def get_standard_metrics_package(df_display: pd.DataFrame, df_full: pd.DataFrame
         total_arrears_val = branch_stats['Arrears'].sum()
         branch_stats['Portfolio_Contribution'] = branch_stats['Arrears'].apply(lambda x: _safe_divide(x, total_arrears_val))
         branch_stats['Classification'] = branch_stats['Risk_Ratio'].apply(classify_risk_ratio)
-        
+
+        # Calculate Trend per Branch if historical data exists
+        branch_stats['Trend'] = "→ stable"
+        if date_col and not df_full.empty:
+            try:
+                latest_date = pd.to_datetime(df_full[date_col]).max()
+                prev_date = latest_date - pd.Timedelta(days=1)
+                
+                current_snap = df_full[pd.to_datetime(df_full[date_col]) == latest_date].groupby(branch_col)[arrears_col].sum()
+                prev_snap = df_full[pd.to_datetime(df_full[date_col]) == prev_date].groupby(branch_col)[arrears_col].sum()
+                
+                def get_direction(branch):
+                    curr = current_snap.get(branch, 0)
+                    prev = prev_snap.get(branch, 0)
+                    if prev == 0: return "→ stable"
+                    diff = (curr - prev) / prev
+                    if diff > 0.01: return "↑ worsening"
+                    if diff < -0.01: return "↓ improving"
+                    return "→ stable"
+                
+                branch_stats['Trend'] = branch_stats['Branch'].apply(get_direction)
+            except Exception:
+                pass
+
+        branch_stats = branch_stats.fillna(0)
         branch_risk_summary = branch_stats.to_dict(orient='records')
     else:
         branch_risk_summary = []
