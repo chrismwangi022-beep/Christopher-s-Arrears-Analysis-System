@@ -76,8 +76,8 @@ def generate_local_insights(metrics: dict[str, Any]) -> dict[str, str]:
     # 2. Portfolio Snapshot (Mimicking Executive Summary)
     summary = (
         "📊 Portfolio Snapshot (Local Analysis Mode)\n"
-        f"- Portfolio exposure is **KES {total_arrears:,.2f}** with **{accounts:,}** active defaulters.\n"
-        f"- PAR is currently **{par_pct:.2f}%** with an aging average of **{avg_days:.1f} days**.\n\n"
+        f"- Portfolio exposure is **KES {total_arrears:,.0f}** with **{accounts:,}** active defaulters.\n"
+        f"- PAR is currently **{par_pct:.1f}%** with an aging average of **{avg_days:.1f} days**.\n\n"
         f"- **Current Outlook:** {status}"
     )
 
@@ -98,14 +98,14 @@ def generate_local_insights(metrics: dict[str, Any]) -> dict[str, str]:
         worst = sorted_branches[0]
         best = sorted_branches[-1]
 
-        branch_insights += "**A. Portfolio Performance Analysis**\n"
-        branch_insights += f"- **Highest Portfolio Risk Ratio:** {worst['Branch'].title()} ({worst['Risk_Ratio']:.2%}) — *{worst['Classification']}*\n"
-        branch_insights += f"- **Strongest Portfolio Quality:** {best['Branch'].title()} (Lowest Risk Ratio: {best['Risk_Ratio']:.2%}) — *{best['Classification']}*\n\n"
+        branch_insights += "**A. Relative Portfolio Performance (Ranking)**\n"
+        branch_insights += f"- **Highest Risk Branch (Relative):** {worst['Branch'].title()} ({worst['Risk_Ratio']:.1%}) — *{worst['Classification']}*\n"
+        branch_insights += f"- **Lowest Risk Branch (Relative):** {best['Branch'].title()} ({best['Risk_Ratio']:.1%}) — *{best['Classification']}*\n\n"
         
-        # Concentration Analysis (Exposure Share)
-        branch_insights += "**B. Arrears Concentration Analysis**\n"
+        # Absolute status and concentration
+        branch_insights += "**B. Absolute Health Status & Concentration**\n"
         top_exposure = sorted(branch_risk_list, key=lambda x: x['Arrears'], reverse=True)[0]
-        branch_insights += f"- **Primary Exposure Hub:** {top_exposure['Branch'].title()} holds {top_exposure['Portfolio_Contribution']:.1%} of total arrears value.\n"
+        branch_insights += f"- **Primary Exposure Hub:** {top_exposure['Branch'].title()} holds **{top_exposure['Portfolio_Contribution']:.1%}** of total arrears volume.\n"
 
         # Identification of critical branches
         critical_branches = [f"{b['Branch'].title()} ({b['Trend']})" for b in sorted_branches if b['Risk_Ratio'] >= 0.20]
