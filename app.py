@@ -22,6 +22,7 @@ from src.data_loader import load_all_data
 from src.calculations import (
     calculate_par_percentage,
     get_top_risk_branch,
+    get_branch_performance,
     get_top_risk_product,
     get_star_performers,
     get_portfolio_distribution_by_aging,
