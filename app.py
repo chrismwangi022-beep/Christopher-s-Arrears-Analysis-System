@@ -47,7 +47,7 @@ from src.constants import (
     CHART_CONFIG,
     DATA_FOLDER,
 )
-from src.ai_engine import generate_ai_insights
+from src.ai_engine import generate_ai_insights, get_ai_health_state
 
 # Page configuration
 st.set_page_config(
@@ -267,6 +267,32 @@ def main():
     else:
         df_display = df_categorized
     
+    # AI Service Health Indicator
+    ai_health = get_ai_health_state()
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("🤖 AI Service Health")
+    
+    status_map = {
+        "Online": ("🟢 AI Online", "success"),
+        "Fallback": ("🟡 AI Fallback Mode", "warning"),
+        "Offline": ("🔴 AI Offline", "error")
+    }
+    status_label, status_type = status_map.get(ai_health["status"], ("⚪ Initializing", "info"))
+    
+    if status_type == "success": st.sidebar.success(status_label)
+    elif status_type == "warning": st.sidebar.warning(status_label)
+    else: st.sidebar.error(status_label)
+
+    with st.sidebar.expander("Service Intelligence Logs"):
+        st.caption(f"**Current Model:** `{ai_health['model']}`")
+        st.caption(f"**Last Sync:** {ai_health['last_success']}")
+        st.caption(f"**Processing:** {'Deterministic (Local)' if ai_health['is_local'] else 'Probabilistic (Gemini)'}")
+        if ai_health["error"]:
+            st.caption(f"**Issue:** :red[{ai_health['error']}]")
+        if st.button("🔄 Refresh AI Status", use_container_width=True):
+             st.cache_data.clear()
+             st.rerun()
+
     # Display filtered record count
     st.sidebar.markdown("---")
     st.sidebar.metric("Records", len(df_display))
@@ -466,9 +492,28 @@ def main():
     if st.button("🚀 Start AI Analysis"):
         with st.spinner("🤖 Analyzing portfolio..."):
             try:
-                st.session_state.ai_results = generate_ai_insights(metrics)
+                results = generate_ai_insights(metrics)
+                st.session_state.ai_results = results
+                
+                # Detection logic for health indicator
+                is_local = any("Local Analysis Mode" in str(v) for v in results.values())
+                
+                if is_local:
+                    ai_health.update({
+                        "status": "Fallback" if "GEMINI_API_KEY" in st.secrets else "Offline",
+                        "is_local": True,
+                        "error": "Quota exhaustion or API unavailable. Switched to rule engine."
+                    })
+                else:
+                    ai_health.update({
+                        "status": "Online",
+                        "is_local": False,
+                        "error": "",
+                        "last_success": datetime.now().strftime("%H:%M:%S")
+                    })
                 st.success("✅ Analysis Complete")
             except Exception as e:
+                ai_health.update({"status": "Offline", "error": str(e)})
                 st.error(f"AI System Error: {str(e)}")
 
     if st.session_state.ai_results:

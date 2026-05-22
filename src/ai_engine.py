@@ -235,6 +235,19 @@ def format_metrics(metrics: dict[str, Any]) -> str:
 # GENERATE AI INSIGHTS
 # ─────────────────────────────────────────────
 
+def get_ai_health_state() -> dict[str, Any]:
+    """Initializes and returns the AI health tracking state for the dashboard."""
+    if "ai_health" not in st.session_state:
+        has_key = "GEMINI_API_KEY" in st.secrets
+        st.session_state.ai_health = {
+            "status": "Online" if has_key else "Offline",
+            "is_local": not has_key,
+            "last_success": "N/A",
+            "model": "gemini-2.0-flash" if has_key else "Deterministic Engine",
+            "error": "" if has_key else "Missing API Credentials (GEMINI_API_KEY)"
+        }
+    return st.session_state.ai_health
+
 @st.cache_data(ttl=600, show_spinner=False)
 def generate_ai_insights(metrics: dict[str, Any]) -> dict[str, str]:
     """
