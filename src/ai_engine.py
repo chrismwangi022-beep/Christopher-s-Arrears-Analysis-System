@@ -23,12 +23,12 @@ from typing import Any
 
 import streamlit as st
 
-# Safe Import Guard for Streamlit Cloud / Missing Dependencies
+# Safe Import Guard for OpenAI / OpenRouter
 try:
-    from google import genai
-    HAS_GENAI = True
+    from openai import OpenAI
+    HAS_OPENAI = True
 except ImportError:
-    HAS_GENAI = False
+    HAS_OPENAI = False
 
 from .ai_agents import (
     RISK_ANALYST_SYSTEM_PROMPT,
@@ -41,10 +41,16 @@ from .ai_agents import (
 # MODEL CONFIG
 # ─────────────────────────────────────────────
 
-MODEL_FALLBACK_ORDER = ["gemini-2.0-flash", "gemini-2.0-flash", "gemini-2.0-flash"]
+MODEL_NAME = "deepseek/deepseek-chat"
 ORCHESTRATOR_DIRECTIVE = "Interpret the provided JSON data according to your analytical persona. Provide the structured executive summary now."
 MAX_RETRIES = 2
 INITIAL_BACKOFF = 2  # seconds
+
+SYSTEM_PROMPT = """
+You are a senior microfinance risk analyst.
+Generate concise portfolio insights, branch analysis, officer flags, and recommendations.
+Keep executive style. No storytelling.
+"""
 
 def generate_local_insights(metrics: dict[str, Any]) -> dict[str, str]:
     """
@@ -119,52 +125,34 @@ def _execute_agent_call(data: dict, system_prompt: str) -> str:
     """
     Unified production runner for all AI agents with model fallback and exponential backoff.
     """
-    if not HAS_GENAI:
+    if not HAS_OPENAI:
         # Return an error signature that triggers generate_local_insights
-        return "⚠️ AI Engine library missing from requirements.txt."
+        return "⚠️ OpenAI/OpenRouter library missing from requirements.txt."
 
-    if "genai_client" not in st.session_state:
+    if "ai_client" not in st.session_state:
         try:
-            from google import genai
-            st.session_state.genai_client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+            st.session_state.ai_client = OpenAI(
+                base_url="https://openrouter.ai/api/v1",
+                api_key=st.secrets["OPENROUTER_API_KEY"],
+            )
         except Exception as e:
-            # If initialization fails, return error to trigger local fallback
             return f"⚠️ API Initialization Error: {str(e)}"
 
     metrics_json = format_metrics(data)
-    last_error = ""
 
-    for model_name in MODEL_FALLBACK_ORDER:
-        for attempt in range(MAX_RETRIES + 1):
-            try:
-                response = st.session_state.genai_client.models.generate_content(
-                    model=model_name,
-                    contents=[system_prompt, f"DATA:\n{metrics_json}"]
-                )
-                if response and response.text:
-                    return response.text.strip()
-                
-            except Exception as e:
-                err_msg = str(e).lower()
-                last_error = str(e)
-                
-                # Check for quota or rate limit errors
-                is_quota_issue = any(x in err_msg for x in ["429", "resource_exhausted", "quota exceeded"])
-                
-                if is_quota_issue:
-                    if attempt < MAX_RETRIES:
-                        # Exponential backoff with jitter
-                        sleep_time = (INITIAL_BACKOFF ** attempt) + random.uniform(0, 1)
-                        time.sleep(sleep_time)
-                        continue
-                    else:
-                        # Max retries reached for this model, fall back to next model
-                        break
-                else:
-                    # Unrecoverable error (e.g. auth, malformed prompt), stop immediately
-                    return f"⚠️ Analysis Error: {last_error}"
-
-    return f"🛡️ AI Service Temporarily Busy: The system encountered a high load. Please try again in a few moments. (Technical Detail: {last_error})"
+    try:
+        response = st.session_state.ai_client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"DATA:\n{metrics_json}"}
+            ],
+            temperature=0.3,
+            max_tokens=700
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        return f"🛡️ AI Service Temporarily Busy: {str(e)}"
 
 
 def run_multi_agent_analysis(data: dict[str, Any]) -> dict[str, str]:
@@ -250,13 +238,13 @@ def get_ai_health_state() -> dict[str, Any]:
     """Initializes and returns the AI health tracking state for the dashboard."""
     if "ai_health" not in st.session_state:
         # Pre-flight check: Key must exist AND library must be installed
-        is_functional = HAS_GENAI and "GEMINI_API_KEY" in st.secrets
+        is_functional = HAS_OPENAI and "OPENROUTER_API_KEY" in st.secrets
         st.session_state.ai_health = {
             "status": "Online" if is_functional else "Offline",
             "is_local": not is_functional,
             "last_success": "N/A",
-            "model": "gemini-2.0-flash" if is_functional else "Deterministic Engine",
-            "error": "" if is_functional else ("Library missing" if not HAS_GENAI else "Missing API Key")
+            "model": "DeepSeek (OpenRouter)" if is_functional else "Deterministic Engine",
+            "error": "" if is_functional else ("Library missing" if not HAS_OPENAI else "Missing OPENROUTER_API_KEY")
         }
     return st.session_state.ai_health
 
@@ -268,11 +256,16 @@ def generate_ai_insights(metrics: dict[str, Any]) -> dict[str, str]:
     """
     try:
         # Early exit if API key is missing
-        if not HAS_GENAI or not st.secrets.get("GEMINI_API_KEY"):
+        if not HAS_OPENAI or not st.secrets.get("OPENROUTER_API_KEY"):
             return generate_local_insights(metrics)
 
         # Attempt multi-agent AI analysis
         results = run_multi_agent_analysis(metrics)
+
+        # Append the DeepSeek footer to the executive summary
+        footer = f"\n\n---\n📈 AI Analytics Engine · DeepSeek AI · Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+        if "executive_summary" in results and not results["executive_summary"].startswith(("⚠️", "🛡️")):
+            results["executive_summary"] += footer
         
         # Detection: If any agent returns an error signature, trigger the fallback engine
         # to ensure the UI remains clean and consistent.
