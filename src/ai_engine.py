@@ -22,16 +22,19 @@ from datetime import datetime
 from typing import Any
 
 import streamlit as st
-from google import genai
+
+# Safe Import Guard for Streamlit Cloud / Missing Dependencies
+try:
+    from google import genai
+    HAS_GENAI = True
+except ImportError:
+    HAS_GENAI = False
+
 from .ai_agents import (
     RISK_ANALYST_SYSTEM_PROMPT,
     BRANCH_PERFORMANCE_ANALYST_PROMPT,
     RISK_ANALYSIS_AGENT_PROMPT,
     RECOVERY_STRATEGY_AGENT_PROMPT,
-    run_standard_analyst,
-    run_risk_agent,
-    run_recovery_agent,
-    run_branch_agent
 )
 
 # ─────────────────────────────────────────────
@@ -116,6 +119,10 @@ def _execute_agent_call(data: dict, system_prompt: str) -> str:
     """
     Unified production runner for all AI agents with model fallback and exponential backoff.
     """
+    if not HAS_GENAI:
+        # Return an error signature that triggers generate_local_insights
+        return "⚠️ AI Engine library missing from requirements.txt."
+
     # Initialize client inside the session context to avoid AttributeErrors during module import
     if "genai_client" not in st.session_state:
         st.session_state.genai_client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
@@ -256,7 +263,7 @@ def generate_ai_insights(metrics: dict[str, Any]) -> dict[str, str]:
     """
     try:
         # Early exit if API key is missing
-        if not st.secrets.get("GEMINI_API_KEY"):
+        if not HAS_GENAI or not st.secrets.get("GEMINI_API_KEY"):
             return generate_local_insights(metrics)
 
         # Attempt multi-agent AI analysis

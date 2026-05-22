@@ -13,8 +13,10 @@ import os
 import io
 import git
 
-# Add src to path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# Ensure robust path resolution for Streamlit Cloud
+ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
+if ROOT_DIR not in sys.path:
+    sys.path.insert(0, ROOT_DIR)
 
 from src.data_loader import load_all_data
 from src.calculations import (
