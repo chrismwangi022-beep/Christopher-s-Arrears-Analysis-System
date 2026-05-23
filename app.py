@@ -552,17 +552,38 @@ def main():
 
     st.markdown("---")
     
+    # --- Robust Preprocessing for Visualization ---
+    # We create a deep copy to ensure no mutation and enforce numeric types
+    chart_df = df_display.copy()
+    
+    numeric_cols = ['Arrears', 'Principle', 'Days', 'TotalBalance']
+    for col in numeric_cols:
+        if col in chart_df.columns:
+            chart_df[col] = pd.to_numeric(chart_df[col], errors='coerce').fillna(0)
+    
+    if 'Report_Date' in chart_df.columns:
+        chart_df['Report_Date'] = pd.to_datetime(chart_df['Report_Date'], errors='coerce')
+
+    # Debugging Diagnostics (Temporary)
+    with st.expander("🛠️ Visualization Diagnostics", expanded=False):
+        diag_col1, diag_col2 = st.columns(2)
+        with diag_col1:
+            st.write(f"**Shape:** {chart_df.shape}")
+            st.write("**Null Counts:**")
+            st.write(chart_df[numeric_cols].isnull().sum() if all(c in chart_df.columns for c in numeric_cols) else "Columns missing")
+        with diag_col2:
+            st.write("**Data Types:**")
+            st.write(chart_df.dtypes)
+
     # Charts Section
     st.subheader("📊 Portfolio Analysis Charts")
-
-    
     
     col_chart1, col_chart2 = st.columns(2)
     
     with col_chart1:
         # Arrears by Branch
-        branch_totals = get_branch_arrears_summary(df_display)
-        if not branch_totals.empty:
+        branch_totals = get_branch_arrears_summary(chart_df)
+        if not branch_totals.empty and branch_totals.sum() > 0:
             fig_branch = go.Figure(data=[
                 go.Bar(
                     x=branch_totals.index,
@@ -581,11 +602,13 @@ def main():
                 dragmode='pan',
             )
             st.plotly_chart(fig_branch, use_container_width=True, config={'scrollZoom': False})
+        else:
+            st.warning("No branch-wise arrears data available for plotting.")
     
     with col_chart2:
         # Arrears by Product - Pie chart (JENGA vs DUMISHA vs others)
-        product_totals = get_product_arrears_summary(df_display)
-        if not product_totals.empty:
+        product_totals = get_product_arrears_summary(chart_df)
+        if not product_totals.empty and product_totals['Arrears'].sum() > 0:
             # Highlight JENGA and DUMISHA explicitly, others remain separate
             fig_product = px.pie(
                 product_totals,
@@ -600,14 +623,16 @@ def main():
             )
             fig_product.update_layout(dragmode='pan')
             st.plotly_chart(fig_product, use_container_width=True, config={'scrollZoom': False})
+        else:
+            st.warning("No product-wise arrears data available for plotting.")
 
     
     
     # Arrears by Aging
     st.subheader("Arrears by Aging Buckets")
-    aging_totals = get_aging_arrears_summary(df_display)
+    aging_totals = get_aging_arrears_summary(chart_df)
     
-    if not aging_totals.empty:
+    if not aging_totals.empty and aging_totals.sum() > 0:
         # Color mapping for aging buckets
         color_map = {
             'Early Warning (1-30)': COLORS['accent_yellow'],
@@ -636,6 +661,8 @@ def main():
             dragmode='pan',
         )
         st.plotly_chart(fig_aging, use_container_width=True, config={'scrollZoom': False})
+    else:
+        st.info("No arrears found in aging buckets to display.")
     
     st.markdown("---")
     
@@ -849,9 +876,14 @@ def main():
     if selected_products and "All" not in selected_products:
         df_trend = df_trend[df_trend['Product'].isin(selected_products)]
 
-    if 'Report_Date' in df.columns:
+    # Clean trend data
+    if 'Report_Date' in df_trend.columns:
+        df_trend['Report_Date'] = pd.to_datetime(df_trend['Report_Date'], errors='coerce')
+        df_trend['Arrears'] = pd.to_numeric(df_trend['Arrears'], errors='coerce').fillna(0)
+        df_trend = df_trend.dropna(subset=['Report_Date'])
+
         trend_grp = get_filtered_trend_data(df_trend, group_choice)
-        if not trend_grp.empty:
+        if not trend_grp.empty and trend_grp['Arrears'].sum() > 0:
             try:
                 palette = [COLORS['accent_cyan'], COLORS['accent_orange'], COLORS['accent_amber'], COLORS['accent_red'], COLORS['accent_yellow']]
                 fig_daily = px.line(
