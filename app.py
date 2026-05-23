@@ -827,17 +827,6 @@ def main():
             with st.expander("View Full Officer League Table"):
                 st.dataframe(officer_perf, use_container_width=True, column_config=table_config, hide_index=True)
     
-    # Dynamic Branch Insights
-    if selected_branches and len(selected_branches) == 1:
-        branch = selected_branches[0]
-        risk_pct = get_branch_risk_percentage(df, branch)
-        main_product = get_main_driver_product_in_branch(df_display, branch)
-        
-        st.markdown("### Branch-Specific Insights")
-        st.info(f"**Branch {branch.title()}** currently holds **{risk_pct:.2f}%** of total portfolio risk.")
-        if main_product:
-            st.info(f"**Recommendation:** Immediate focus on **{main_product}**, which is the main driver of arrears in this branch.")
-    
     # Portfolio Distribution by Aging
     st.markdown("---")
     st.subheader("📈 Portfolio Distribution by Aging Buckets")
