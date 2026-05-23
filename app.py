@@ -6,7 +6,6 @@ Main Streamlit Application
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import sys
 import os
@@ -390,13 +389,21 @@ def main():
                             origin = repo.remote(name='origin')
                             origin.set_url(remote_url)
                             
-                            # Set strategy and user identity for the automated commit
+                            # Set user identity for the automated commit
                             with repo.config_writer() as cw:
                                 cw.set_value("user", "name", "Spread Capital Admin")
                                 cw.set_value("user", "email", "admin@spreadcapital.com")
-                                cw.set_value("pull", "rebase", "true")
-                            
-                            origin.pull("main")
+
+                            # Reconcile divergent branches (caused by the Heartbeat Action)
+                            # Using rebase with -Xtheirs ensures remote heartbeat updates 
+                            # don't block local uploads.
+                            try:
+                                repo.git.pull('origin', 'main', rebase=True, X='theirs')
+                            except git.exc.GitCommandError as e:
+                                # If a rebase conflict occurs, abort to prevent a stuck state
+                                if "rebase" in str(e).lower():
+                                    repo.git.rebase("--abort")
+                                raise e
 
                             # 3. Add and Commit files
                             repo.index.add(["data/"])  # Adds all files in the data folder
@@ -596,8 +603,6 @@ def main():
             grand_total = branch_totals.sum()
             fig_branch.update_layout(
                 title=f"Arrears by Branch<br><sub>Grand Total Arrears: {CURRENCY_SYMBOL} {grand_total:,.0f}</sub>",
-                xaxis_title="Branch",
-                yaxis_title="Arrears Amount",
                 height=400,
                 dragmode='pan',
             )
@@ -641,22 +646,18 @@ def main():
             'Critical (>90)': COLORS['accent_red'],
             'Current': '#90EE90'
         }
-        colors = [color_map.get(bucket, COLORS['accent_cyan']) for bucket in aging_totals.index]
-        
-        fig_aging = go.Figure(data=[
-            go.Bar(
-                x=aging_totals.index,
-                y=aging_totals.values,
-                marker_color=colors,
-                text=[f"{CURRENCY_SYMBOL} {val:,.0f}" for val in aging_totals.values],
-                textposition='outside',
-            )
-        ])
+        fig_aging = px.bar(
+            x=aging_totals.index,
+            y=aging_totals.values,
+            text=[f"{CURRENCY_SYMBOL} {val:,.0f}" for val in aging_totals.values],
+            color=aging_totals.index,
+            color_discrete_map=color_map,
+            labels={'x': 'Aging Bucket', 'y': 'Arrears Amount'}
+        )
+        fig_aging.update_traces(textposition='outside')
         grand_total = aging_totals.sum()
         fig_aging.update_layout(
             title=f"Arrears by Aging Buckets<br><sub>Grand Total Arrears: {CURRENCY_SYMBOL} {grand_total:,.0f}</sub>",
-            xaxis_title="Aging Bucket",
-            yaxis_title="Arrears Amount",
             height=400,
             dragmode='pan',
         )
@@ -776,17 +777,18 @@ def main():
     
     # 🎯 Performance Rankings & Insights
     st.subheader("🎯 Performance Rankings & Insights")
+    st.caption("Relative ranking compares entities against peers, while status reflects absolute portfolio health.")
     
     # Global High-Risk Metrics
     m_col1, m_col2, m_col3 = st.columns(3)
     with m_col1:
         top_branch = get_top_risk_branch(df_display)
         if top_branch:
-            st.metric("Highest Risk Branch", top_branch[0].title(), f"{top_branch[1]:.2%}")
+            st.metric("Highest Risk Branch", top_branch[0].title(), f"{top_branch[1]:.1%}")
     with m_col2:
         top_product = get_top_risk_product(df_display)
         if top_product:
-            st.metric("Highest Risk Product", top_product[0], f"{top_product[1]:.2%}")
+            st.metric("Highest Risk Product", top_product[0], f"{top_product[1]:.1%}")
     with m_col3:
         st.metric("Overall Portfolio PAR", f"{calculate_par_percentage(df_display):.2f}%")
 
@@ -796,17 +798,17 @@ def main():
     table_config = {
         "Arrears": st.column_config.NumberColumn(format=f"{CURRENCY_SYMBOL} %,.0f"),
         "Principal": st.column_config.NumberColumn(format=f"{CURRENCY_SYMBOL} %,.0f"),
-        "Risk_Ratio": st.column_config.NumberColumn("Ratio %", format="%.2%"),
+        "Risk_Ratio": st.column_config.NumberColumn("Ratio %", format="%.1%"),
         "Classification": st.column_config.TextColumn("Status")
     }
 
     with tab_branch:
         branch_perf = get_branch_performance(df_display)
         if not branch_perf.empty:
-            st.markdown("#### 🔴 Worst Performing Branches (Highest Risk)")
+            st.markdown("#### 🔴 Highest Risk Branches (Relative Ranking)")
             st.dataframe(branch_perf.head(5), use_container_width=True, column_config=table_config, hide_index=True)
             
-            st.markdown("#### 🟢 Best Performing Branches (Lowest Risk)")
+            st.markdown("#### 🟢 Lowest Risk Branch (Relative Ranking)")
             st.dataframe(branch_perf.tail(5).sort_values('Risk_Ratio', ascending=True), use_container_width=True, column_config=table_config, hide_index=True)
             
             with st.expander("View Full Branch League Table"):
@@ -815,10 +817,10 @@ def main():
     with tab_officer:
         officer_perf = get_officer_performance(df_display)
         if not officer_perf.empty:
-            st.markdown("#### ⚠️ Officers Needing Intervention (Highest Risk)")
+            st.markdown("#### 🔴 Highest Risk Officers (Relative Ranking)")
             st.dataframe(officer_perf.head(5), use_container_width=True, column_config=table_config, hide_index=True)
             
-            st.markdown("#### 👏 Top Performing Officers (Lowest Risk)")
+            st.markdown("#### 🟢 Lowest Risk Officers (Relative Ranking)")
             st.dataframe(officer_perf.tail(5).sort_values('Risk_Ratio', ascending=True), use_container_width=True, column_config=table_config, hide_index=True)
 
             with st.expander("View Full Officer League Table"):
