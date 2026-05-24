@@ -555,11 +555,13 @@ def main():
         if "executive_summary" in ai_results:
             st.markdown(ai_results["executive_summary"])
         
-        tab_risk, tab_rec = st.tabs(["🛡️ Risk AI", "🛠️ Recovery AI"])
+        tab_risk, tab_rec, tab_branch_ai = st.tabs(["🛡️ Risk AI", "🛠️ Recovery AI", "🏢 Branch AI"])
         with tab_risk:
             st.markdown(ai_results.get("risk", "Interpretation pending..."))
         with tab_rec:
             st.markdown(ai_results.get("recovery", "Operation strategy pending..."))
+        with tab_branch_ai:
+            st.markdown(ai_results.get("branch", "Branch intelligence pending..."))
             
         st.markdown("---")
         st.caption(f"🤖 Multi-Agent Orchestrator · Active Agents: {len(ai_results)}")
