@@ -109,7 +109,8 @@ def _call_gemini(data: dict[str, Any], system_prompt: str) -> str:
             model=MODEL_NAME,
             contents=[system_prompt, prompt]
         )
-        return response.text.strip()
+        text = response.text
+        return text.strip() if text else ""
     except Exception as e:
         return f"Interpretation Error: {str(e)}"
 

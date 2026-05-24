@@ -194,7 +194,8 @@ def _execute_agent_call(data: dict, system_prompt: str) -> str:
             temperature=0.3,
             max_tokens=700
         )
-        return response.choices[0].message.content.strip()
+        content = response.choices[0].message.content
+        return content.strip() if content else ""
     except Exception as e:
         return f"🛡️ AI Service Temporarily Busy: {str(e)}"
 
@@ -418,6 +419,7 @@ def _execute_recovery_manager_call(data: dict) -> str:
             temperature=0.5,
             max_tokens=1000
         )
-        return response.choices[0].message.content.strip()
+        content = response.choices[0].message.content
+        return content.strip() if content else ""
     except Exception as e:
         return f"🛡️ Recovery AI Busy: {str(e)}"
