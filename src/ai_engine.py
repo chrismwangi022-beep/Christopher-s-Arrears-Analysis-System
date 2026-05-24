@@ -114,11 +114,36 @@ def generate_local_insights(metrics: dict[str, Any]) -> dict[str, str]:
     else:
         branch_insights += "- No branch risk data available for the current selection.\n"
         
-    branch_insights += "\n👤 Officer Flags\n"
-    top_officers = list(officer_summary.keys())[:3]
-    if top_officers:
-        for off in top_officers:
-            branch_insights += f"- {off.title()} → Managing KES {officer_summary[off]:,.0f} in arrears\n"
+    branch_insights += "\n👤 Officer-Level Recovery Actions\n"
+    # Required Fix: Generate actions based ONLY on officer's specific portfolio
+    # This prevents cross-branch contamination (e.g. Embu officer receiving Serem tasks)
+    processed_officers = 0
+    for off_name, stats in officer_summary.items():
+        if processed_officers >= 5: break # limit to top 5 risk-heavy officers
+        
+        # Safeguards: Skip empty portfolios or invalid branch assignments
+        arrears = stats.get('Arrears', 0) if isinstance(stats, dict) else stats
+        branch = stats.get('Branch', 'Unassigned') if isinstance(stats, dict) else "Assigned Branch"
+        days = stats.get('Avg_Days', avg_days) if isinstance(stats, dict) else avg_days
+        
+        if arrears <= 0 or not branch or branch in ["Unassigned", "NaN"]:
+            continue
+            
+        # Quality: Use officer-specific delinquency patterns and recovery urgency
+        if days > 180:
+            action = f"Prioritize recovery follow-up on accounts above 180 days within your {branch.title()} portfolio, particularly high-balance delinquent accounts showing prolonged inactivity."
+        elif days > 90:
+            action = f"Initiate immediate legal demand procedures and asset recovery protocols for accounts in {branch.title()} exceeding 90 days."
+        elif days > 30:
+            action = f"Intensify field visits to {branch.title()} clients in the 31-90 day bucket to prevent further aging into loss categories."
+        else:
+            action = f"Maintain routine collection frequency and automated SMS reminders for the early-stage {branch.title()} portfolio."
+            
+        branch_insights += f"- **{off_name.title()} ({branch.title()}):** {action}\n"
+        processed_officers += 1
+
+    if processed_officers == 0:
+        branch_insights += "- No specific officer-level actions flagged for this selection.\n"
 
     # 5. Recommendations
     rec = "💡 Recommendations\n"
