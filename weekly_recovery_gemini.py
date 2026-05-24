@@ -158,14 +158,34 @@ def build_weekly_summary(branch_name: str, df: pd.DataFrame) -> dict:
     net_movement = closing - opening
     diffs = daily_stats.diff().fillna(0)
     
-    # Trend & Risk Logic
-    trend = "Improving" if net_movement < 0 else "Worsening" if net_movement > 0 else "Stable"
-    risk_level = "Critical" if closing > daily_stats.max() * 0.95 else "High" if net_movement > 0 else "Controlled"
-    recovery_status = "Good recovery momentum" if net_movement < 0 else "Slow recovery activity"
+    # Component 1: Trend Detection Engine
+    move_ratio = net_movement / opening if opening > 0 else 0
+    if move_ratio <= -0.05: trend_class = "Improving"
+    elif move_ratio >= 0.10: trend_class = "Critical"
+    elif move_ratio > 0: trend_class = "Worsening"
+    else: trend_class = "Stable"
+
+    # Component 2: Spike Detection Engine
+    max_spike = diffs.max()
+    spike_date = diffs.idxmax().strftime('%Y-%m-%d') if not diffs.empty else "N/A"
+    spike_severity = "Critical" if max_spike > 0.08 * opening else "High" if max_spike > 0.04 * opening else "Normal"
+
+    # Component 4: Recovery Momentum Engine
+    rec_days = (diffs < 0).sum()
+    consistency = rec_days / len(diffs) if len(diffs) > 0 else 0
+    if consistency >= 0.6: mom_class = "Strengthening"
+    elif consistency <= 0.2: mom_class = "Critical"
+    elif consistency <= 0.4: mom_class = "Weakening"
+    else: mom_class = "Stable"
+    
+    # Detect reversals (Spike larger than preceding recovery)
+    reversal = any((diffs.iloc[i-1] < 0 and diffs.iloc[i] > abs(diffs.iloc[i-1])) for i in range(1, len(diffs)))
 
     # Officer Calculation
     all_dates = daily_stats.index.sort_values()
     start_dt, end_dt = all_dates[0], all_dates[-1]
+    avg_branch_arr = curr_week.groupby('Loan_Officer')['Arrears'].sum().mean() if not curr_week.empty else 0
+    
     off_metrics = []
     for off in curr_week['Loan_Officer'].unique():
         off_df = curr_week[curr_week['Loan_Officer'] == off]
@@ -174,9 +194,10 @@ def build_weekly_summary(branch_name: str, df: pd.DataFrame) -> dict:
         net = c_arr - o_arr
         dpd = off_df[off_df['Report_Date'] == end_dt]['Average_Days_Past_Due'].mean() if 'Average_Days_Past_Due' in off_df.columns else 0
         
-        status = "🟢 Doing well"
-        if net > 0 or dpd > 60: status = "🔴 Requires close follow-up"
-        elif net == 0 and c_arr > 0: status = "🟠 Needs attention"
+        # Component 3: Officer Risk Engine
+        status = "🟢 Improving" if net < 0 else "🟠 Needs attention"
+        if net > 0 and dpd > 60: status = "🔴 Overloaded high-risk"
+        elif dpd > 90 or c_arr > avg_branch_arr * 1.5: status = "🔴 Critical Watchlist"
         
         off_metrics.append({
             "name": off, 
@@ -207,16 +228,16 @@ def build_weekly_summary(branch_name: str, df: pd.DataFrame) -> dict:
         "opening": opening,
         "closing": closing,
         "movement": net_movement,
-        "trend": trend,
-        "risk_level": risk_level,
+        "trend_class": trend_class,
+        "mom_class": mom_class,
+        "reversal": reversal,
         "peak_arrears": daily_stats.max(),
         "peak_date": daily_stats.idxmax().strftime('%Y-%m-%d'),
-        "spike": diffs.max(),
+        "spike_info": {"amount": max_spike, "date": spike_date, "severity": spike_severity},
         "recovery": abs(diffs.min()) if diffs.min() < 0 else 0,
         "worst_officers": worst_3,
         "best_officers": best_2,
-        "key_concern": key_concern,
-        "recovery_status": recovery_status
+        "key_concern": key_concern
     }
 
 def generate_weekly_narrative(summary: dict) -> str:
@@ -242,14 +263,16 @@ def generate_weekly_narrative(summary: dict) -> str:
 
         prompt = f"""
 ACT AS: A Professional Portfolio Manager for Spread Capital.
-TONE: Professional, respectful, firm, and simple English.
+TONE: Professional, respectful, firm, and simple English. Avoid technical banking jargon.
 
 DATA SUMMARY:
 Branch: {summary['branch']}
 Arrears: Opening KSh {summary['opening']:,.0f} -> Closing KSh {summary['closing']:,.0f} (Net: KSh {summary['movement']:,.0f})
-Trend: {summary['trend']} | Risk: {summary['risk_level']} | Status: {summary['recovery_status']}
+Trend: {summary['trend_class']} | Momentum: {summary['mom_class']}
 Peak: KSh {summary['peak_arrears']:,.0f} on {summary['peak_date']}
-Spike: KSh {summary['spike']:,.0f} | Max Recovery: KSh {summary['recovery']:,.0f}
+Spike: KSh {summary['spike_info']['amount']:,.0f} on {summary['spike_info']['date']} (Severity: {summary['spike_info']['severity']})
+Max Recovery: KSh {summary['recovery']:,.0f}
+Reversals detected: {'Yes' if summary['reversal'] else 'No'}
 Key Concern: {summary['key_concern']}
 
 OFFICERS NEEDING ATTENTION:
@@ -259,11 +282,17 @@ TOP OFFICERS:
 {best_txt}
 
 TASK:
-Generate a structured Weekly Recovery Performance Report for WhatsApp.
-Use sections: 🚩 Branch Report, 🔥 Recovery Momentum, ⚠️ Risk Level, 💀 Damage, 📉 Improvement Needed, 👤 Officer Summary, 🥊 Action Plan, ⚡ Final Message.
+Generate a structured Branch Recovery Radar intelligence report for WhatsApp.
+Use sections: 🚩 Branch Report, 🔥 Recovery Momentum, ⚠️ Risk Level, 💀 Damage, 📉 Improvement Needed, 👤 Officer Summary, 🥊 Action Plan, 📡 BRANCH RECOVERY RADAR, ⚡ Final Message.
+
+In the 📡 BRANCH RECOVERY RADAR section, include:
+- High Priority Alerts (based on trend and spike severity)
+- Officer Watchlist (identify overloaded or high-risk portfolios)
+- Operational Concerns (weakening recovery patterns or midweek reversals)
+- Positive Signals (highlight improving trends or high-performing officers)
 
 RULES:
-1. Simple English only (e.g., "High unpaid balances" instead of "concentration").
+1. Simple English only. Use "High unpaid balances" instead of "concentration" and "Risky growth" instead of "deterioration".
 2. Officer section MUST use this format:
    [Name]
    Arrears: KSh [Amt] | Recovery: KSh [Amt] | DPD: [Val]
