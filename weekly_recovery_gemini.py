@@ -204,6 +204,16 @@ def generate_weekly_report(branch_name: str, df: pd.DataFrame) -> str:
     if curr_week.empty:
         return "OFFLINE: Insufficient weekly activity data to generate a performance ultimatum."
 
+    # Compute safe scalar metrics locally before calling AI to ensure safe fallback
+    daily_stats = curr_week.groupby('Report_Date')['Arrears'].sum().sort_index()
+    if daily_stats.empty:
+        return "OFFLINE: Insufficient activity for statistical generation."
+
+    opening_arrears = daily_stats.iloc[0]
+    closing_arrears = daily_stats.iloc[-1]
+    net_movement = closing_arrears - opening_arrears
+    peak_arrears = daily_stats.max()
+
     # 4. Build prompt
     prompt = build_prompt(branch_name, curr_week, prev_week)
 
@@ -218,6 +228,17 @@ def generate_weekly_report(branch_name: str, df: pd.DataFrame) -> str:
         )
         return response.text.strip()
         
-    except Exception:
-        # 7. Faster graceful fallback
-        return "RECOVERY ACTION REQUIRED: AI report timed out. Based on latest data, Net Movement is KSh " + f"{current_week_data['Arrears'].sum() - previous_week_data['Arrears'].sum():,.0f}" + ". Deploy field officers immediately."
+    except Exception as e:
+        # Return clean fallback using pre-computed scalars
+        return f'''
+🚨 RECOVERY ACTION REQUIRED
+
+AI service temporarily unavailable.
+
+Branch: {branch_name}
+
+Current Net Movement:
+KSh {net_movement:,.0f}
+
+Field collections must intensify immediately.
+'''.strip()
