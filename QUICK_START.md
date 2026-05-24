@@ -12,6 +12,7 @@ Your Streamlit app has been upgraded for cloud deployment with:
 ## Quick Setup (5 minutes)
 
 ### Prerequisites
+
 - Python 3.8+
 - Google Cloud account (free tier available)
 - Google Drive account
@@ -76,6 +77,7 @@ streamlit run app.py
 ## How to Use
 
 ### Upload Data
+
 1. Click "📁 Data Source" section
 2. Click "Choose a CSV or Excel file"
 3. Select your arrears report
