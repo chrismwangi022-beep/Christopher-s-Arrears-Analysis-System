@@ -201,16 +201,6 @@ def load_data():
     """Load and cache data."""
     return load_all_data()
 
-@st.cache_data(ttl=3600)
-def generate_weekly_recovery_reports(df):
-    """Independent logic to pre-generate reports for all branches."""
-    if df.empty: return {}
-    reports = {}
-    unique_branches = df['Branch'].dropna().unique()
-    for b in unique_branches:
-        reports[b] = generate_weekly_report(b, df)
-    return reports
-
 # Main app
 def main():
     st.title("📊 Spread Capital - Arrears Analysis System")
@@ -936,31 +926,44 @@ def main():
         st.markdown("---")
         branch_name = selected_branches[0]
         
-        # This call is cached; will run once for all branches then return instantly
-        with st.spinner(f"📡 Accessing Recovery Command for {branch_name}..."):
-            weekly_reports = generate_weekly_recovery_reports(df)
+        if "weekly_reports_cache" not in st.session_state:
+            st.session_state["weekly_reports_cache"] = {}
+
+        st.subheader("🚨 Weekly Recovery Intelligence Report")
         
-        if branch_name in weekly_reports:
-            report_content = weekly_reports[branch_name]
-            
-            st.container(border=True).subheader("🚨 Weekly Recovery Intelligence Report")
-            
-            # Display the report with operational styling
-            st.markdown(report_content)
-            
-            st.markdown("---")
-            st.caption("📱 **WhatsApp-Ready Intelligence**")
-            
-            # Copy-ready text area
+        # Determine current week start (Monday) for cache keying to support weekly resets
+        now = pd.Timestamp.now().normalize()
+        monday_date = (now - pd.Timedelta(days=now.weekday())).strftime('%Y-%m-%d')
+        cache_key = f"{branch_name}_{monday_date}"
+
+        col_ai1, col_ai2 = st.columns(2)
+        with col_ai1:
+            if st.button("🚀 Generate Weekly Report (Gemini AI)", use_container_width=True):
+                if cache_key not in st.session_state["weekly_reports_cache"]:
+                    with st.spinner(f"📡 Accessing Recovery Command for {branch_name}..."):
+                        st.session_state["weekly_reports_cache"][cache_key] = generate_weekly_report(branch_name, df_display)
+                else:
+                    st.toast("Report retrieved from local cache.")
+        
+        report_content = st.session_state["weekly_reports_cache"].get(cache_key)
+
+        with col_ai2:
+            if report_content:
+                if st.button("♻️ Regenerate Report", use_container_width=True):
+                    with st.spinner("Refreshing intelligence..."):
+                        st.session_state["weekly_reports_cache"][cache_key] = generate_weekly_report(branch_name, df_display)
+                        st.rerun()
+
+        if report_content:
             st.text_area(
-                label="Field Communication (Copy below)",
+                label="Field Communication (WhatsApp Copy)",
                 value=report_content,
-                height=300,
+                height=600,
                 key="recovery_report_text"
             )
             
             if st.button("📋 Copy Weekly Report", use_container_width=True):
-                st.toast("Report ready for WhatsApp pasting!")
+                st.toast("Report ready for copying from text area!")
 
 if __name__ == "__main__":
     main()

@@ -4,154 +4,152 @@ Standalone Gemini AI Agent
 """
 
 import google.generativeai as genai
-import streamlit as st
 import pandas as pd
+import os
 from datetime import datetime, timedelta
 
 def get_current_week(df: pd.DataFrame) -> pd.DataFrame:
     """
     Filters dataframe for the current operational week: 
-    Start: latest Monday
-    End: current date
+    - Start: Latest Monday relative to today
+    - End: Current timestamp
     """
     if df.empty or 'Report_Date' not in df.columns:
         return pd.DataFrame()
     
-    # Create working copy with robust datetime handling
     df_temp = df.copy()
-    df_temp['Report_Date'] = pd.to_datetime(df_temp['Report_Date'], errors='coerce')
+    # Coerce to datetime and force to naive to avoid timezone comparison issues
+    df_temp['Report_Date'] = pd.to_datetime(df_temp['Report_Date'], errors='coerce').dt.tz_localize(None)
     df_temp = df_temp.dropna(subset=['Report_Date'])
     
-    # Identify latest Monday relative to today using pandas Timestamp
-    today_norm = pd.Timestamp.now().normalize()
-    monday = today_norm - pd.Timedelta(days=today_norm.weekday())
+    # Determine Monday of the current week
+    now = pd.Timestamp.now().tz_localize(None)
+    today = now.normalize()
+    monday = today - pd.Timedelta(days=today.weekday())
     
-    # Filter dataframe from Monday -> today
-    return df_temp[(df_temp['Report_Date'] >= monday) & (df_temp['Report_Date'] <= pd.Timestamp.now())]
+    return df_temp[(df_temp['Report_Date'] >= monday) & (df_temp['Report_Date'] <= now)]
 
 def get_previous_week(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Returns data before the current week for comparison context in AI prompt.
+    Returns data for the 7-day window preceding the current Monday.
+    Used for historical performance context in AI analysis.
     """
     if df.empty or 'Report_Date' not in df.columns:
         return pd.DataFrame()
 
     df_temp = df.copy()
-    df_temp['Report_Date'] = pd.to_datetime(df_temp['Report_Date'], errors='coerce')
+    # Coerce to datetime and force to naive to avoid timezone comparison issues
+    df_temp['Report_Date'] = pd.to_datetime(df_temp['Report_Date'], errors='coerce').dt.tz_localize(None)
     df_temp = df_temp.dropna(subset=['Report_Date'])
 
-    today_norm = pd.Timestamp.now().normalize()
-    current_monday = today_norm - pd.Timedelta(days=today_norm.weekday())
+    today = pd.Timestamp.now().tz_localize(None).normalize()
+    current_monday = today - pd.Timedelta(days=today.weekday())
     
     prev_monday = current_monday - pd.Timedelta(days=7)
-    prev_sunday = current_monday - pd.Timedelta(seconds=1)
+    prev_period_end = current_monday - pd.Timedelta(seconds=1)
 
-    return df_temp[(df_temp['Report_Date'] >= prev_monday) & (df_temp['Report_Date'] <= prev_sunday)]
+    return df_temp[(df_temp['Report_Date'] >= prev_monday) & (df_temp['Report_Date'] <= prev_period_end)]
 
 def build_prompt(branch_name: str, current_week_data: pd.DataFrame, previous_week_data: pd.DataFrame) -> str:
     """
-    Constructs the aggressive, strict Recovery Manager prompt for Gemini.
+    Generates a structured prompt for Gemini AI following the Recovery Manager persona.
+    Optimized for Gemini 1.5 Flash.
     """
-    # Calculate core metrics for the prompt context
-    daily_arrears = current_week_data.groupby('Report_Date')['Arrears'].sum().sort_index()
-    
-    opening = daily_arrears.iloc[0]
-    closing = daily_arrears.iloc[-1]
-    peak = daily_arrears.max()
-    peak_date = daily_arrears.idxmax().strftime('%b %d')
-    net_movement = closing - opening
-    
-    diffs = daily_arrears.diff().fillna(0)
-    max_spike = diffs.max()
-    max_recovery = abs(diffs.min()) if diffs.min() < 0 else 0
-    
-    prev_context = "No historical deterioration context available."
+    # Summarize current week data
+    daily_stats = current_week_data.groupby('Report_Date')['Arrears'].sum().sort_index()
+
+    opening_arrears = daily_stats.iloc[0]
+    closing_arrears = daily_stats.iloc[-1]
+    peak_arrears = daily_stats.max()
+    net_movement = closing_arrears - opening_arrears
+
+    # Calculate biggest spike and biggest recovery
+    diffs = daily_stats.diff().fillna(0)
+    biggest_spike = diffs.max()
+    biggest_recovery = abs(diffs.min()) if diffs.min() < 0 else 0
+
+    # Previous week comparison
+    comparison_note = "No previous week data available for benchmark comparison."
     if not previous_week_data.empty:
-        prev_sum = previous_week_data.groupby('Report_Date')['Arrears'].sum()
-        prev_avg = prev_sum.mean()
-        prev_context = f"PREVIOUS WEEK AVG ARREARS: KSh {prev_avg:,.0f}"
+        prev_sum = previous_week_data['Arrears'].sum()
+        curr_sum = current_week_data['Arrears'].sum()
+        if curr_sum > prev_sum:
+            comparison_note = f"Arrears have increased by KSh {curr_sum - prev_sum:,.0f} compared to last week. Performance is slipping."
+        else:
+            comparison_note = f"Arrears have dropped by KSh {prev_sum - curr_sum:,.0f} since last week, but the current volume is still high."
 
     prompt = f"""
-ACT AS: A strict, aggressive, and frustrated Recovery Manager. 
-TONE: Blunt, operational, and field-focused. NO corporate jargon. NO synergies. NO soft language.
-GOAL: Generate a WhatsApp-ready recovery performance ultimatum for {branch_name}.
+ACT AS: A strict, no-nonsense Recovery Manager for Spread Capital.
+TONE: Aggressive, blunt, and plain English ONLY. No corporate jargon. No soft language.
 
-METRICS FOR {branch_name.upper()}:
-- Period: Monday to Today
-- Opening Arrears: KSh {opening:,.0f}
-- Peak Arrears: KSh {peak:,.0f} on {peak_date}
-- Closing Arrears: KSh {closing:,.0f}
+METRICS FOR BRANCH: {branch_name.upper()}
+- Opening Arrears: KSh {opening_arrears:,.0f}
+- Peak Arrears: KSh {peak_arrears:,.0f}
+- Closing Arrears: KSh {closing_arrears:,.0f}
+- Biggest Daily Spike: KSh {biggest_spike:,.0f}
+- Biggest Daily Recovery: KSh {biggest_recovery:,.0f}
 - Net Movement: KSh {net_movement:,.0f}
-- Highest Single-Day Deterioration: KSh {max_spike:,.0f}
-- Strongest Recovery Day: KSh {max_recovery:,.0f}
-- {prev_context}
 
-OUTPUT STRUCTURE (STRICT ADHERENCE REQUIRED):
-🚩 [BRANCH NAME] – WEEKLY RECOVERY PERFORMANCE ULTIMATUM
-Period: Monday - {datetime.now().strftime('%b %d, %Y')}
+CONTEXT:
+{comparison_note}
 
-🔥 RECOVERY MOMENTUM
-[IMPROVING / STAGNANT / WEAKENING / CRITICAL]
+TASK:
+Generate a structured performance ultimatum for the branch team. Inject behavioral commentary (lazy collection patterns) and operational pressure (bonus risks, borrower dominance).
 
-⚠️ PRESSURE INDEX
-[LOW / MODERATE / HIGH / EXTREME]
+STRUCTURE (STRICT ADHERENCE):
 
-📍 BRANCH STATUS
-[Stable / Recovering / Unstable / Deteriorating / Critical]
+🚩 [{branch_name.upper()}] – WEEKLY RECOVERY PERFORMANCE ULTIMATUM
 
-💀 THE DAMAGE (The Numbers)
-Summarize opening, peak (with date), closing, movement, spike, and recovery day. Use KSh.
-
+💀 THE DAMAGE
 📉 WHERE WE FAILED
-[2–4 aggressive operational paragraphs. Call out lazy collection patterns and weak follow-through based on the movement numbers provided.]
-
-🔥 THE PRESSURE ZONE
-[Explain operational danger: bonus pressure, borrower dominance, risk escalation.]
-
-🥊 BATTLE PLAN: NO EXCUSES
-Immediate Target: [Dynamic KSh amount]
-Field Intensity: [NORMAL / HIGH / EXTREME]
-Field Strategy: [Demand face-to-face collections]
-The "Red Line": [Dynamic KSh threshold branch must not cross]
-
+🔥 PRESSURE ZONE
+🥊 BATTLE PLAN
 ⚠️ WEEK-END WARNING
-[Operational warning based on data trends.]
-
 ⚡ FINAL WORD
-[Very aggressive closing statement.]
 
 RULES:
-- WhatsApp-ready formatting (proper spacing for mobile).
-- NO markdown tables.
-- Return ONLY the final report text.
+- Use plain English only. No corporate jargon or soft talk.
+- Format specifically for WhatsApp: Use *bold* for critical text only.
+- Use the emoji headers provided with double line breaks for mobile readability.
+- Keep paragraphs extremely short (max 2-3 sentences) for small screens.
+- NO markdown tables, NO code blocks, and NO hashtag headers (#).
+- The structure must be clean and ready for immediate copy-pasting.
+- Output ONLY the report text. No explanations.
 """
-    return prompt
+    return prompt.strip()
 
 def generate_weekly_report(branch_name: str, df: pd.DataFrame) -> str:
     """
     Main entry point for generating a report. Filters data and calls Gemini.
+    Strictly backend logic; no Streamlit dependencies.
     """
-    api_key = st.secrets.get("GEMINI_API_KEY")
-    if not api_key: return "ERROR: Gemini API Key missing from secrets."
+    # API Key retrieval from environment
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        return "SYSTEM ERROR: Recovery Intelligence API Key not configured."
 
-    genai.configure(api_key=api_key)
-    # Using requested model string
-    model = genai.GenerativeModel('gemini-2.0-flash')
+    # 1. Filter dataframe by branch
+    branch_df = df[df['Branch'] == branch_name]
+    if branch_df.empty:
+        return f"SKIP: No records identified for branch '{branch_name}'."
 
-    branch_df = df[df['Branch'] == branch_name].copy()
-    if branch_df.empty: return f"ERROR: Branch '{branch_name}' not found."
-
-    # Week Logic
+    # 2. & 3. Compute week windows using existing utilities
     curr_week = get_current_week(branch_df)
-    if curr_week.empty: return "ERROR: Insufficient data for the current week window."
-
-    # Historical Context (Previous Week)
     prev_week = get_previous_week(branch_df)
 
+    if curr_week.empty:
+        return "OFFLINE: Insufficient weekly activity data to generate a performance ultimatum."
+
+    # 4. Build prompt
     prompt = build_prompt(branch_name, curr_week, prev_week)
 
     try:
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        # 5. Send to Gemini
         response = model.generate_content(prompt)
-        return response.text.strip()
-    except Exception as e:
-        return f"ERROR: Gemini failed to generate report. {str(e)}"
+        # 6. Return response.text only
+        return response.text
+    except Exception:
+        # 7. Handle API failure gracefully with fallback message
+        return "BATTLE PLAN UNAVAILABLE: AI service timeout. Intensify field visits and manual follow-ups immediately."
