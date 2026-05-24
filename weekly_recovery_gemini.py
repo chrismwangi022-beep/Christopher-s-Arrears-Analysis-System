@@ -125,40 +125,30 @@ def build_prompt(branch_name: str, current_week_data: pd.DataFrame, previous_wee
             comparison_note = f"Arrears are DOWN vs last week (Avg KSh {prev_avg - curr_avg:,.0f} lower). Keep the pressure on."
 
     prompt = f"""
-ACT AS: Strict, no-nonsense Recovery Manager. Tone: Aggressive, blunt, plain English.
+ACT AS: A strict, aggressive, and no-nonsense Recovery Manager for Spread Capital.
+TONE: Aggressive, blunt, and plain English ONLY. No corporate jargon. No soft language.
 
-BRANCH: {branch_name.upper()}
+INSTRUCTIONS:
+Generate a FULL detailed report. 
+Do NOT summarize. 
+Do NOT stop early. 
+Complete ALL sections fully.
+
+METRICS FOR BRANCH: {branch_name.upper()}
 Opening: KSh {opening_arrears:,.0f} | Closing: KSh {closing_arrears:,.0f} | Net: KSh {net_movement:,.0f}
-Peak: KSh {peak_arrears:,.0f} on {peak_date}
-Spike: KSh {biggest_spike:,.0f} | Recovery: KSh {biggest_recovery:,.0f}
+Peak: KSh {peak_arrears:,.0f} on {peak_date} | Spike: KSh {biggest_spike:,.0f} | Recovery: KSh {biggest_recovery:,.0f}
 Volatility: {volatility_level} | Momentum: {recovery_momentum} | Pressure: {pressure_index}
 
 CONTEXT: {comparison_note}
 
-TASK: Generate a structured performance ultimatum. NO raw data dumps.
+TASK: Generate a structured performance ultimatum. Inject behavioral commentary (lazy collection patterns) and operational pressure (bonus risks).
 
-ACT AS: A strict, no-nonsense Recovery Manager for Spread Capital.
-TONE: Aggressive, blunt, and plain English ONLY. No corporate jargon. No soft language.
-
-METRICS FOR BRANCH: {branch_name.upper()}
-- Opening Arrears: KSh {opening_arrears:,.0f}
-- Peak Arrears: KSh {peak_arrears:,.0f}
-- Closing Arrears: KSh {closing_arrears:,.0f}
-- Biggest Daily Spike: KSh {biggest_spike:,.0f}
-- Peak Date: {peak_date}
-- Biggest Daily Recovery: KSh {biggest_recovery:,.0f}
-- Net Movement: KSh {net_movement:,.0f}
-
-CONTEXT:
-{comparison_note}
-
-TASK:
-Generate a structured performance ultimatum for the branch team. Inject behavioral commentary (lazy collection patterns) and operational pressure (bonus risks, borrower dominance).
-
-STRUCTURE (STRICT ADHERENCE):
+STRUCTURE (STRICT ADHERENCE REQUIRED FOR ALL SECTIONS):
 
 🚩 [{branch_name.upper()}] – WEEKLY RECOVERY PERFORMANCE ULTIMATUM
 
+🔥 RECOVERY MOMENTUM
+⚠️ PRESSURE INDEX
 💀 THE DAMAGE
 📉 WHERE WE FAILED
 🔥 PRESSURE ZONE
@@ -230,16 +220,30 @@ def generate_weekly_report(branch_name: str, df: pd.DataFrame) -> str:
             init_status = f"Failed: {str(init_err)}"
             raise init_err
 
-        # 5. Send to Gemini with specific generation config and safety timeout
-        response = model.generate_content(
-            prompt,
-            generation_config={
-                "temperature": 0.7,
-                "max_output_tokens": 800,
-            },
-            request_options={"timeout": 20}
-        )
-        return response.text.strip()
+        # 5. Generation parameters
+        gen_config = {
+            "temperature": 0.7,
+            "max_output_tokens": 2500,
+        }
+
+        # 6. Execute generation with one automatic retry if truncation detected
+        response = model.generate_content(prompt, generation_config=gen_config, request_options={"timeout": 30})
+        report_text = response.text.strip()
+
+        # Safety check: Detect missing end-of-report sections
+        required_markers = ["🥊 BATTLE PLAN", "⚠️ WEEK-END WARNING", "⚡ FINAL WORD"]
+        is_incomplete = not all(marker in report_text for marker in required_markers)
+
+        if is_incomplete:
+            print(f"DEBUG: Truncation detected for {branch_name}. Retrying generation...")
+            response = model.generate_content(
+                "The previous output was cut off. Please generate the FULL report from start to finish. " + prompt, 
+                generation_config=gen_config, 
+                request_options={"timeout": 35}
+            )
+            report_text = response.text.strip()
+
+        return report_text
         
     except Exception as e:
         # Return FULL error details temporarily for debugging
