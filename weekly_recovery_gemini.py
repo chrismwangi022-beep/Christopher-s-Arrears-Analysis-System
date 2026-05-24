@@ -140,226 +140,172 @@ def get_previous_week(df: pd.DataFrame) -> pd.DataFrame:
 
     return df_temp[(df_temp['Report_Date'] >= prev_monday) & (df_temp['Report_Date'] <= prev_period_end)]
 
-def build_prompt(branch_name: str, current_week_data: pd.DataFrame, previous_week_data: pd.DataFrame) -> str:
+def build_weekly_summary(branch_name: str, df: pd.DataFrame) -> dict:
     """
-    Generates a structured prompt for Gemini AI following the Recovery Manager persona.
-    Optimized for Gemini 2.5 Flash.
+    STAGE 1 — SUMMARY ENGINE
+    Computes branch-level metrics and officer performance using pandas only.
+    No Gemini calls or narrative writing.
     """
-    # Summarize current week data
-    daily_stats = current_week_data.groupby('Report_Date')['Arrears'].sum().sort_index()
-
-    if daily_stats.empty:
-        return "Insufficient data to generate report."
-
-    opening_arrears = daily_stats.iloc[0]
-    closing_arrears = daily_stats.iloc[-1]
-    peak_arrears = daily_stats.max()
-    peak_date = daily_stats.idxmax().strftime('%Y-%m-%d')
-    net_movement = closing_arrears - opening_arrears
-
-    # Calculate biggest spike and biggest recovery
-    diffs = daily_stats.diff().fillna(0)
-    biggest_spike = diffs.max()
-    biggest_recovery = abs(diffs.min()) if diffs.min() < 0 else 0
+    curr_week = get_current_week(df)
+    prev_week = get_previous_week(df)
     
-    # Advanced Local Metrics for AI Context
-    volatility_level = "Unstable Performance" if biggest_spike > (opening_arrears * 0.05) else "Stable Performance"
-    recovery_momentum = "Performance is improving" if net_movement < 0 else "Performance is getting weaker" if net_movement > 0 else "Steady"
-    risk_level = "Critical" if closing_arrears > peak_arrears * 0.95 else "Elevated" if net_movement > 0 else "Controlled"
+    daily_stats = curr_week.groupby('Report_Date')['Arrears'].sum().sort_index()
+    if daily_stats.empty:
+        return {}
 
-    # 👤 Loan Officer Performance Calculation
+    opening = daily_stats.iloc[0]
+    closing = daily_stats.iloc[-1]
+    net_movement = closing - opening
+    diffs = daily_stats.diff().fillna(0)
+    
+    # Trend & Risk Logic
+    trend = "Improving" if net_movement < 0 else "Worsening" if net_movement > 0 else "Stable"
+    risk_level = "Critical" if closing > daily_stats.max() * 0.95 else "High" if net_movement > 0 else "Controlled"
+    recovery_status = "Good recovery momentum" if net_movement < 0 else "Slow recovery activity"
+
+    # Officer Calculation
     all_dates = daily_stats.index.sort_values()
     start_dt, end_dt = all_dates[0], all_dates[-1]
-    
     off_metrics = []
-    for off in current_week_data['Loan_Officer'].unique():
-        off_df = current_week_data[current_week_data['Loan_Officer'] == off]
-        start_row = off_df[off_df['Report_Date'] == start_dt]
-        end_row = off_df[off_df['Report_Date'] == end_dt]
-        
-        c_arr = end_row['Arrears'].sum() if not end_row.empty else 0
-        o_arr = start_row['Arrears'].sum() if not start_row.empty else 0
-        off_net = c_arr - o_arr
-        off_dpd = end_row['Average_Days_Past_Due'].iloc[0] if not end_row.empty else 0
+    for off in curr_week['Loan_Officer'].unique():
+        off_df = curr_week[curr_week['Loan_Officer'] == off]
+        c_arr = off_df[off_df['Report_Date'] == end_dt]['Arrears'].sum()
+        o_arr = off_df[off_df['Report_Date'] == start_dt]['Arrears'].sum()
+        net = c_arr - o_arr
+        dpd = off_df[off_df['Report_Date'] == end_dt]['Average_Days_Past_Due'].mean() if 'Average_Days_Past_Due' in off_df.columns else 0
         
         status = "🟢 Doing well"
-        if off_net > 0 or off_dpd > 60: status = "🔴 Requires close follow-up"
-        elif off_net == 0 and c_arr > 0: status = "🟠 Needs attention"
-            
-        off_metrics.append({"name": off, "arr": c_arr, "net": off_net, "dpd": off_dpd, "status": status})
+        if net > 0 or dpd > 60: status = "🔴 Requires close follow-up"
+        elif net == 0 and c_arr > 0: status = "🟠 Needs attention"
+        
+        off_metrics.append({
+            "name": off, 
+            "arr": c_arr, 
+            "net": net, 
+            "dpd": dpd, 
+            "status": status, 
+            "rec": abs(net) if net < 0 else 0
+        })
 
     off_metrics.sort(key=lambda x: x['net'], reverse=True)
-    
-    # Limit to Top 3 Worst and Top 2 Best to prevent truncation
     worst_3 = off_metrics[:3]
     remaining = [m for m in off_metrics if m not in worst_3]
     best_2 = sorted(remaining, key=lambda x: x['net'])[:2]
 
-    # Previous week comparison
-    comparison_note = "No previous week data available for benchmark comparison."
-    if not previous_week_data.empty:
-        prev_avg = previous_week_data['Arrears'].mean()
-        curr_avg = current_week_data['Arrears'].mean()
+    # Key Concern Logic
+    key_concern = "Unpaid balances are stable."
+    if not prev_week.empty:
+        prev_avg = prev_week['Arrears'].mean()
+        curr_avg = curr_week['Arrears'].mean()
         if curr_avg > prev_avg:
-            comparison_note = f"Unpaid balances are higher than last week (Average KSh {curr_avg - prev_avg:,.0f} increase). Performance is getting weaker."
+            key_concern = f"Higher unpaid balances than last week (KSh {curr_avg - prev_avg:,.0f} avg increase)."
         else:
-            comparison_note = f"Unpaid balances are lower than last week (Average KSh {prev_avg - curr_avg:,.0f} decrease). Performance is improving."
+            key_concern = "Weekly performance shows improvement vs previous period."
 
-    prompt = f"""
+    return {
+        "branch": branch_name.upper(),
+        "opening": opening,
+        "closing": closing,
+        "movement": net_movement,
+        "trend": trend,
+        "risk_level": risk_level,
+        "peak_arrears": daily_stats.max(),
+        "peak_date": daily_stats.idxmax().strftime('%Y-%m-%d'),
+        "spike": diffs.max(),
+        "recovery": abs(diffs.min()) if diffs.min() < 0 else 0,
+        "worst_officers": worst_3,
+        "best_officers": best_2,
+        "key_concern": key_concern,
+        "recovery_status": recovery_status
+    }
+
+def generate_weekly_narrative(summary: dict) -> str:
+    """
+    STAGE 2 — NARRATIVE ENGINE
+    Uses Gemini AI to generate a professional WhatsApp-ready report from computed summary.
+    No calculations performed here.
+    """
+    if not summary:
+        return "OFFLINE: Insufficient activity data to generate report."
+
+    api_key = st.secrets.get("GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        return "SYSTEM ERROR: Gemini API Key not configured."
+
+    try:
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel("gemini-2.5-flash")
+
+        # Compact officer text for prompt
+        worst_txt = "\n".join([f"- {m['name']}: KSh {m['arr']:,.0f} Arrears | {m['rec']:,.0f} Recovery | {m['dpd']:.1f} DPD | {m['status']}" for m in summary['worst_officers']])
+        best_txt = "\n".join([f"- {m['name']}: KSh {m['arr']:,.0f} Arrears | {m['rec']:,.0f} Recovery | {m['dpd']:.1f} DPD | {m['status']}" for m in summary['best_officers']])
+
+        prompt = f"""
 ACT AS: A Professional Portfolio Manager for Spread Capital.
-TONE: Professional, respectful, firm, and simple English. Suitable for senior management and loan officers.
+TONE: Professional, respectful, firm, and simple English.
 
-INSTRUCTIONS:
-Generate a structured Weekly Recovery Performance Report. 
-Use clear language and avoid harsh, insulting, or overly dramatic wording.
-Complete ALL sections fully.
-Ensure the report is fully completed. Do not stop mid-section or mid-officer.
+DATA SUMMARY:
+Branch: {summary['branch']}
+Arrears: Opening KSh {summary['opening']:,.0f} -> Closing KSh {summary['closing']:,.0f} (Net: KSh {summary['movement']:,.0f})
+Trend: {summary['trend']} | Risk: {summary['risk_level']} | Status: {summary['recovery_status']}
+Peak: KSh {summary['peak_arrears']:,.0f} on {summary['peak_date']}
+Spike: KSh {summary['spike']:,.0f} | Max Recovery: KSh {summary['recovery']:,.0f}
+Key Concern: {summary['key_concern']}
 
-METRICS FOR BRANCH: {branch_name.upper()}
-Opening: KSh {opening_arrears:,.0f} | Closing: KSh {closing_arrears:,.0f} | Net: KSh {net_movement:,.0f}
-Peak: KSh {peak_arrears:,.0f} on {peak_date} | Spike: KSh {biggest_spike:,.0f} | Recovery: KSh {biggest_recovery:,.0f}
-Performance Status: {volatility_level} | Momentum: {recovery_momentum} | Risk Level: {risk_level}
+OFFICERS NEEDING ATTENTION:
+{worst_txt}
 
-OFFICERS REQUIRING ATTENTION (TOP 3):
-{chr(10).join([f"- {m['name']}: Arrears KSh {m['arr']:,.0f} | Net KSh {m['net']:,.0f} | DPD: {m['dpd']:.1f} | {m['status']}" for m in worst_3])}
+TOP OFFICERS:
+{best_txt}
 
-TOP PERFORMING OFFICERS (TOP 2):
-{chr(10).join([f"- {m['name']}: Arrears KSh {m['arr']:,.0f} | Net KSh {m['net']:,.0f} | DPD: {m['dpd']:.1f} | {m['status']}" for m in best_2])}
-
-CONTEXT: {comparison_note}
-
-TASK: Generate a structured performance update. 
-1. Evaluate officers ONLY within their assigned branch portfolio. DO NOT suggest cross-branch assignments.
-2. Use simple English: Use "High unpaid balances" instead of "concentration" and "High amount under responsibility" instead of "exposure".
-3. Provide short, actionable guidance. Avoid long emotional commentary.
-
-STRUCTURE (STRICT ADHERENCE REQUIRED FOR ALL SECTIONS):
-
-🚩 [{branch_name.upper()}] – WEEKLY RECOVERY PERFORMANCE REPORT
-🔥 RECOVERY MOMENTUM
-⚠️ RISK LEVEL
-💀 THE DAMAGE
-📉 IMPROVEMENT NEEDED
-👤 OFFICER SUMMARY
-Use this compact format for EACH officer:
-[Name]
-Arrears: KSh [Amt] | Recovery: KSh [Amt] | DPD: [Val]
-Status: [Status]
-Comment: [One short sentence max]
-
-🥊 ACTION PLAN
-Split into Branch-level and Officer-level actions.
-⚡ FINAL MESSAGE
+TASK:
+Generate a structured Weekly Recovery Performance Report for WhatsApp.
+Use sections: 🚩 Branch Report, 🔥 Recovery Momentum, ⚠️ Risk Level, 💀 Damage, 📉 Improvement Needed, 👤 Officer Summary, 🥊 Action Plan, ⚡ Final Message.
 
 RULES:
-- Use plain English only. No corporate jargon or soft talk.
-- Format specifically for WhatsApp: Use *bold* for critical text only.
-- Use the emoji headers provided with double line breaks for mobile readability.
-- Keep paragraphs extremely short (max 2-3 sentences) for small screens.
-- NO markdown tables, NO code blocks, and NO hashtag headers (#).
-- The structure must be clean and ready for immediate copy-pasting.
-- Output ONLY the report text. No explanations.
+1. Simple English only (e.g., "High unpaid balances" instead of "concentration").
+2. Officer section MUST use this format:
+   [Name]
+   Arrears: KSh [Amt] | Recovery: KSh [Amt] | DPD: [Val]
+   Status: [Status]
+   Comment: [One short sentence]
+3. Ensure the report is fully completed. Do not stop mid-officer.
+4. Formatting: *bold* for critical info, emoji headers, extremely short paragraphs.
+5. Output ONLY the report text.
 """
-    return prompt.strip()
+        config = {
+            "temperature": 0.4,
+            "max_output_tokens": 2200
+        }
+
+        response = model.generate_content(prompt, generation_config=config, request_options={"timeout": 40})
+        return response.text.strip()
+
+    except Exception as e:
+        return f"Gemini Narrative Error: {str(e)}"
 
 def generate_weekly_report(branch_name: str, df: pd.DataFrame) -> str:
     """
-    Main entry point for generating a report. Filters data and calls Gemini.
-    Strictly backend logic; no Streamlit dependencies.
+    Orchestrates the two-stage AI reporting system.
+    1. STAGE 1 — SUMMARY ENGINE (Pandas)
+    2. STAGE 2 — NARRATIVE ENGINE (Gemini)
     """
-    # Safeguard for missing library
-    if not HAS_GOOGLE_AI:
-        return "SYSTEM ERROR: The 'google-generativeai' library is not resolved. Please run 'pip install google-generativeai'."
-
-    # API Key retrieval with fallback to Streamlit secrets
-    api_key = st.secrets.get("GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
-            
-    if not api_key:
-        return "SYSTEM ERROR: Recovery Intelligence API Key not configured."
-
     # 1. Load historical snapshots to provide true weekly movement context
     snapshot_file = "historical_branch_snapshots.csv"
+    branch_df = pd.DataFrame()
     if os.path.exists(snapshot_file):
         hist_df = pd.read_csv(snapshot_file)
-        # Map summary columns back to names expected by filtering/summarization utilities
         hist_df = hist_df.rename(columns={'Date': 'Report_Date', 'Total_Arrears': 'Arrears'})
         branch_df = hist_df[hist_df['Branch'] == branch_name].copy()
-    else:
-        # Fallback to current dashboard view if no history found
+    
+    if branch_df.empty:
         branch_df = df[df['Branch'] == branch_name]
 
     if branch_df.empty:
         return f"SKIP: No records identified for branch '{branch_name}'."
 
-    # 2. & 3. Compute week windows using existing utilities
-    curr_week = get_current_week(branch_df)
-    prev_week = get_previous_week(branch_df)
-
-    if curr_week.empty:
-        return "OFFLINE: Insufficient weekly activity data to generate a performance ultimatum."
-
-    # Compute safe scalar metrics locally before calling AI to ensure safe fallback
-    daily_stats = curr_week.groupby('Report_Date')['Arrears'].sum().sort_index()
-    if daily_stats.empty:
-        return "OFFLINE: Insufficient activity for statistical generation."
-
-    opening_arrears = daily_stats.iloc[0]
-    closing_arrears = daily_stats.iloc[-1]
-    net_movement = closing_arrears - opening_arrears
-    peak_arrears = daily_stats.max()
-
-    # 4. Build prompt
-    prompt = build_prompt(branch_name, curr_week, prev_week)
-
-    model_name = "gemini-2.5-flash"
-    init_status = "Initializing"
-
-    try:
-        genai.configure(api_key=api_key)
-        print(f"Using Gemini model: {model_name}")
-        try:
-            model = genai.GenerativeModel(model_name)
-            init_status = "Successful"
-        except Exception as init_err:
-            init_status = f"Failed: {str(init_err)}"
-            raise init_err
-
-        # 5. Generation parameters
-        gen_config = {
-            "temperature": 0.7,
-            "max_output_tokens": 2000,
-        }
-
-        # 6. Execute generation with one automatic retry if truncation detected
-        response = model.generate_content(prompt, generation_config=gen_config, request_options={"timeout": 30})
-        report_text = response.text.strip()
-
-        # Safety check: Detect missing end-of-report sections
-        required_markers = ["🥊 ACTION PLAN", "⚠️ END OF WEEK NOTE", "⚡ FINAL MESSAGE"]
-        is_incomplete = not all(marker in report_text for marker in required_markers)
-
-        if is_incomplete:
-            print(f"DEBUG: Truncation detected for {branch_name}. Retrying generation...")
-            response = model.generate_content(
-                "The previous output was cut off. Please generate the FULL report from start to finish. " + prompt, 
-                generation_config=gen_config, 
-                request_options={"timeout": 35}
-            )
-            report_text = response.text.strip()
-
-        return report_text
-        
-    except Exception as e:
-        # Return FULL error details temporarily for debugging
-        return f"""
-Gemini Error: {str(e)}
-
-DEBUG OUTPUTS:
-- Selected Model: {model_name}
-- Initialization Status: {init_status}
-- Branch Name: {branch_name}
-- Current Week Rows Count: {len(curr_week)}
-- Opening Arrears: KSh {opening_arrears:,.0f}
-- Closing Arrears: KSh {closing_arrears:,.0f}
-- Net Movement: KSh {net_movement:,.0f}
-""".strip()
+    # Stage 1: Summary Engine
+    summary = build_weekly_summary(branch_name, branch_df)
+    
+    # Stage 2: Narrative Engine
+    return generate_weekly_narrative(summary)
