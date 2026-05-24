@@ -229,16 +229,14 @@ def generate_weekly_report(branch_name: str, df: pd.DataFrame) -> str:
         return response.text.strip()
         
     except Exception as e:
-        # Return clean fallback using pre-computed scalars
-        return f'''
-🚨 RECOVERY ACTION REQUIRED
+        # Return FULL error details temporarily for debugging
+        return f"""
+Gemini Error: {str(e)}
 
-AI service temporarily unavailable.
-
-Branch: {branch_name}
-
-Current Net Movement:
-KSh {net_movement:,.0f}
-
-Field collections must intensify immediately.
-'''.strip()
+DEBUG OUTPUTS:
+- Branch Name: {branch_name}
+- Current Week Rows Count: {len(curr_week)}
+- Opening Arrears: KSh {opening_arrears:,.0f}
+- Closing Arrears: KSh {closing_arrears:,.0f}
+- Net Movement: KSh {net_movement:,.0f}
+""".strip()
