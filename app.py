@@ -5,18 +5,13 @@ Main Streamlit Application
 
 import streamlit as st
 import pandas as pd
-<<<<<<< HEAD
-
 try:
+    import plotly.graph_objects as go
     import plotly.express as px
     HAS_PLOTLY = True
 except ImportError:
     HAS_PLOTLY = False
 
-=======
-import plotly.graph_objects as go
-import plotly.express as px
->>>>>>> 57aa0ac92b863aab1d4a114574a56573ecac9dbe
 from datetime import datetime, timedelta
 import sys
 import os
@@ -596,14 +591,10 @@ def main():
 
     # Charts Section
     st.subheader("📊 Portfolio Analysis Charts")
-<<<<<<< HEAD
-    
+
     if not HAS_PLOTLY:
         st.error("Plotly is not installed. Visual charts are currently unavailable.")
         return
-    
-=======
->>>>>>> 57aa0ac92b863aab1d4a114574a56573ecac9dbe
     
     col_chart1, col_chart2 = st.columns(2)
     
@@ -845,180 +836,10 @@ def main():
 
             with st.expander("View Full Officer League Table"):
                 st.dataframe(officer_perf, use_container_width=True, column_config=table_config, hide_index=True)
-<<<<<<< HEAD
 
     # 🏢 Branch Intelligence Engine
     st.markdown("---")
     render_branch_intelligence(df_display, df, selected_branches)
-=======
-    
-    # =========================================================
-    # BRANCH-SPECIFIC AI INSIGHTS
-    # Only show when specific branches are selected
-    # =========================================================
-
-    if (
-        selected_branches
-        and "All" not in selected_branches
-    ):
-
-        st.markdown("---")
-        st.subheader("🏢 Branch-Specific Insights")
-
-        selected_branch_df = df_display[
-            df_display["Branch"].isin(selected_branches)
-        ]
-
-        if not selected_branch_df.empty:
-
-            # =====================================================
-            # SINGLE BRANCH ANALYSIS
-            # =====================================================
-
-            if len(selected_branches) == 1:
-
-                branch = selected_branches[0]
-
-                total_arrears = selected_branch_df["Arrears"].sum()
-
-                total_principal = (
-                    selected_branch_df["Principle"].sum()
-                )
-
-                risk_ratio = (
-                    total_arrears / total_principal
-                    if total_principal > 0 else 0
-                )
-
-                avg_days = (
-                    selected_branch_df["Days"]
-                    .fillna(0)
-                    .mean()
-                )
-
-                top_product = (
-                    selected_branch_df.groupby("Product")["Arrears"]
-                    .sum()
-                    .sort_values(ascending=False)
-                    .index[0]
-                )
-
-                status = (
-                    "🔴 Critical"
-                    if risk_ratio > 0.15
-                    else "🟠 Watchlist"
-                    if risk_ratio > 0.08
-                    else "🟢 Healthy"
-                )
-
-                st.info(f"""
-### 🏢 {branch.upper()} Branch Analysis
-
-- **Total Arrears:** {CURRENCY_SYMBOL} {total_arrears:,.0f}
-- **Portfolio Exposure Ratio:** {risk_ratio:.2%}
-- **Average Days Past Due:** {avg_days:.1f}
-- **Main Risk Product:** {top_product}
-- **Risk Status:** {status}
-
-### 📌 AI Insight
-{branch.title()} branch currently shows a portfolio risk ratio of
-{risk_ratio:.2%} with arrears concentration mainly driven by
-{top_product} loans.
-
-Priority focus should be on delinquent accounts above
-30 days to prevent migration into critical aging buckets.
-""")
-
-            # =====================================================
-            # MULTI-BRANCH COMPARISON
-            # =====================================================
-
-            else:
-
-                branch_summary = (
-                    selected_branch_df
-                    .groupby("Branch")
-                    .agg({
-                        "Arrears": "sum",
-                        "Principle": "sum",
-                        "Days": "mean"
-                    })
-                    .reset_index()
-                )
-
-                branch_summary["Risk_Ratio"] = (
-                    branch_summary["Arrears"]
-                    / branch_summary["Principle"]
-                )
-
-                branch_summary = branch_summary.sort_values(
-                    by="Risk_Ratio",
-                    ascending=False
-                )
-
-                worst_branch = branch_summary.iloc[0]
-                best_branch = branch_summary.iloc[-1]
-
-                st.warning(f"""
-### 📊 Multi-Branch Risk Comparison
-
-#### 🔴 Highest Risk Branch
-**{worst_branch['Branch']}**
-- Arrears: {CURRENCY_SYMBOL} {worst_branch['Arrears']:,.0f}
-- Risk Ratio: {worst_branch['Risk_Ratio']:.2%}
-
-#### 🟢 Best Performing Branch
-**{best_branch['Branch']}**
-- Arrears: {CURRENCY_SYMBOL} {best_branch['Arrears']:,.0f}
-- Risk Ratio: {best_branch['Risk_Ratio']:.2%}
-
-### 📌 Portfolio Comparison Insight
-
-The selected branches show significant variation in
-portfolio quality.
-
-{worst_branch['Branch']} currently has the highest
-arrears-to-principal exposure ratio among the selected
-branches and requires immediate collection focus.
-
-{best_branch['Branch']} demonstrates stronger portfolio
-control with lower relative delinquency levels.
-""")
-
-                display_summary = branch_summary.copy()
-
-                display_summary["Arrears"] = (
-                    display_summary["Arrears"]
-                    .apply(lambda x: f"{CURRENCY_SYMBOL} {x:,.0f}")
-                )
-
-                display_summary["Principle"] = (
-                    display_summary["Principle"]
-                    .apply(lambda x: f"{CURRENCY_SYMBOL} {x:,.0f}")
-                )
-
-                display_summary["Risk_Ratio"] = (
-                    display_summary["Risk_Ratio"]
-                    .apply(lambda x: f"{x:.2%}")
-                )
-
-                display_summary["Days"] = (
-                    display_summary["Days"]
-                    .apply(lambda x: f"{x:.1f}")
-                )
-
-                st.dataframe(
-                    display_summary.rename(columns={
-                        "Branch": "Branch",
-                        "Arrears": "Total Arrears",
-                        "Principle": "Total Principal",
-                        "Risk_Ratio": "Risk Ratio",
-                        "Days": "Avg Days Past Due"
-                    }),
-                    use_container_width=True,
-                    hide_index=True
-                )
->>>>>>> 57aa0ac92b863aab1d4a114574a56573ecac9dbe
 
     # Portfolio Distribution by Aging
     st.markdown("---")
