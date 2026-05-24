@@ -50,11 +50,16 @@ Use the following sections:
 🔥 RECOVERY MOMENTUM (Use: "Performance is improving/getting weaker")
 ⚠️ RISK LEVEL (Use: "Risk level" instead of "Pressure index")
 💀 THE DAMAGE (Summarize numbers)
-📉 WHERE WE NEED IMPROVEMENT (Professional critique)
-🔥 KEY CONCERNS (Identify high unpaid balances)
+📉 IMPROVEMENT NEEDED (Professional critique)
+👤 OFFICER SUMMARY
+Use compact format:
+[Name]
+Arrears: KSh [Amt] | Recovery: KSh [Amt] | DPD: [Val]
+Status: [Status]
+Comment: [One short sentence]
+
 🥊 ACTION PLAN (Instructions like "Please prioritize field visits")
-⚠️ END OF WEEK NOTE (Operational focus)
 ⚡ FINAL MESSAGE (Professional and encouraging closing)
 
-RULES: Simple English only, formatted for WhatsApp, no harsh or insulting language.
+RULES: Simple English only, no harsh language. Ensure the report is fully completed.
 """

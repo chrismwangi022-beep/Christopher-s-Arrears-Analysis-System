@@ -189,8 +189,11 @@ def build_prompt(branch_name: str, current_week_data: pd.DataFrame, previous_wee
         off_metrics.append({"name": off, "arr": c_arr, "net": off_net, "dpd": off_dpd, "status": status})
 
     off_metrics.sort(key=lambda x: x['net'], reverse=True)
-    best_officer = min(off_metrics, key=lambda x: x['net'])['name'] if off_metrics else "N/A"
-    worst_officer = max(off_metrics, key=lambda x: x['net'])['name'] if off_metrics else "N/A"
+    
+    # Limit to Top 3 Worst and Top 2 Best to prevent truncation
+    worst_3 = off_metrics[:3]
+    remaining = [m for m in off_metrics if m not in worst_3]
+    best_2 = sorted(remaining, key=lambda x: x['net'])[:2]
 
     # Previous week comparison
     comparison_note = "No previous week data available for benchmark comparison."
@@ -210,45 +213,43 @@ INSTRUCTIONS:
 Generate a structured Weekly Recovery Performance Report. 
 Use clear language and avoid harsh, insulting, or overly dramatic wording.
 Complete ALL sections fully.
+Ensure the report is fully completed. Do not stop mid-section or mid-officer.
 
 METRICS FOR BRANCH: {branch_name.upper()}
 Opening: KSh {opening_arrears:,.0f} | Closing: KSh {closing_arrears:,.0f} | Net: KSh {net_movement:,.0f}
 Peak: KSh {peak_arrears:,.0f} on {peak_date} | Spike: KSh {biggest_spike:,.0f} | Recovery: KSh {biggest_recovery:,.0f}
 Performance Status: {volatility_level} | Momentum: {recovery_momentum} | Risk Level: {risk_level}
 
-OFFICER PERFORMANCE SUMMARY:
-{chr(10).join([f"- {m['name']}: Arrears KSh {m['arr']:,.0f} | Net KSh {m['net']:,.0f} | Avg DPD: {m['dpd']:.1f} | {m['status']}" for m in off_metrics])}
-Highest Performance: {best_officer} | Needs Support: {worst_officer}
+OFFICERS REQUIRING ATTENTION (TOP 3):
+{chr(10).join([f"- {m['name']}: Arrears KSh {m['arr']:,.0f} | Net KSh {m['net']:,.0f} | DPD: {m['dpd']:.1f} | {m['status']}" for m in worst_3])}
+
+TOP PERFORMING OFFICERS (TOP 2):
+{chr(10).join([f"- {m['name']}: Arrears KSh {m['arr']:,.0f} | Net KSh {m['net']:,.0f} | DPD: {m['dpd']:.1f} | {m['status']}" for m in best_2])}
 
 CONTEXT: {comparison_note}
 
 TASK: Generate a structured performance update. 
 1. Evaluate officers ONLY within their assigned branch portfolio. DO NOT suggest cross-branch assignments.
 2. Use simple English: Use "High unpaid balances" instead of "concentration" and "High amount under responsibility" instead of "exposure".
-3. Provide actionable guidance that is firm but respectful.
+3. Provide short, actionable guidance. Avoid long emotional commentary.
 
 STRUCTURE (STRICT ADHERENCE REQUIRED FOR ALL SECTIONS):
 
 🚩 [{branch_name.upper()}] – WEEKLY RECOVERY PERFORMANCE REPORT
-
 🔥 RECOVERY MOMENTUM
 ⚠️ RISK LEVEL
-👤 LOAN OFFICER PERFORMANCE REVIEW
-Analyze each officer listed above. Classify them (🟢/🟠/🔴) and provide specific recovery instructions for their portfolios. 
-Focus on field visit priorities and escalation triggers.
-
 💀 THE DAMAGE
-📉 WHERE WE FAILED
-🔥 RECOVERY MOMENTUM
-⚠️ PRESSURE INDEX
+📉 IMPROVEMENT NEEDED
+👤 OFFICER SUMMARY
+Use this compact format for EACH officer:
+[Name]
+Arrears: KSh [Amt] | Recovery: KSh [Amt] | DPD: [Val]
+Status: [Status]
+Comment: [One short sentence max]
 
-🥊 BATTLE PLAN
-Split into:
-- BRANCH-LEVEL ACTIONS: High-level strategic moves.
-- OFFICER-LEVEL ACTIONS: Specific account handling focus per officer group.
-
-⚠️ WEEK-END WARNING
-⚡ FINAL WORD
+🥊 ACTION PLAN
+Split into Branch-level and Officer-level actions.
+⚡ FINAL MESSAGE
 
 RULES:
 - Use plain English only. No corporate jargon or soft talk.
@@ -326,7 +327,7 @@ def generate_weekly_report(branch_name: str, df: pd.DataFrame) -> str:
         # 5. Generation parameters
         gen_config = {
             "temperature": 0.7,
-            "max_output_tokens": 2500,
+            "max_output_tokens": 2000,
         }
 
         # 6. Execute generation with one automatic retry if truncation detected
