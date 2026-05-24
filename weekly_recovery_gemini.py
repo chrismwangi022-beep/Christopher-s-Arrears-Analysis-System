@@ -16,6 +16,35 @@ except ImportError:
 # Fallback for Streamlit environment
 import streamlit as st
 
+def verify_gemini_setup() -> dict:
+    """
+    Diagnostic utility to verify Gemini AI environment configuration.
+    Returns a status report for connectivity and model accessibility.
+    """
+    report = {
+        "library_installed": HAS_GOOGLE_AI,
+        "api_key_found": False,
+        "model_accessible": False,
+        "error": None
+    }
+
+    if not HAS_GOOGLE_AI:
+        report["error"] = "google-generativeai library not found. Run: pip install google-generativeai"
+        return report
+
+    api_key = st.secrets.get("GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
+    if api_key:
+        report["api_key_found"] = True
+        try:
+            genai.configure(api_key=api_key)
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            # Lightweight check for model initialization
+            report["model_accessible"] = True
+        except Exception as e:
+            report["error"] = str(e)
+    
+    return report
+
 def get_current_week(df: pd.DataFrame) -> pd.DataFrame:
     """
     Filters dataframe for the current operational week: 
@@ -136,12 +165,7 @@ def generate_weekly_report(branch_name: str, df: pd.DataFrame) -> str:
         return "SYSTEM ERROR: The 'google-generativeai' library is not resolved. Please run 'pip install google-generativeai'."
 
     # API Key retrieval with fallback to Streamlit secrets
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        try:
-            api_key = st.secrets.get("GEMINI_API_KEY")
-        except Exception:
-            api_key = None
+    api_key = st.secrets.get("GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
             
     if not api_key:
         return "SYSTEM ERROR: Recovery Intelligence API Key not configured."
