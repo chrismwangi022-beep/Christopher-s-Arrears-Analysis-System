@@ -30,7 +30,7 @@ try:
 except ImportError:
     HAS_OPENAI = False
 
-from .ai_agents import (
+from src.ai_agents import (
     RISK_ANALYST_SYSTEM_PROMPT,
     BRANCH_PERFORMANCE_ANALYST_PROMPT,
     RISK_ANALYSIS_AGENT_PROMPT,

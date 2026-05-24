@@ -5,12 +5,23 @@ Main Streamlit Application
 
 import streamlit as st
 import pandas as pd
-import plotly.express as px
+
+try:
+    import plotly.express as px
+    HAS_PLOTLY = True
+except ImportError:
+    HAS_PLOTLY = False
+
 from datetime import datetime, timedelta
 import sys
 import os
 import io
-import git
+
+try:
+    import git
+    HAS_GIT = True
+except ImportError:
+    HAS_GIT = False
 
 # Ensure robust path resolution for Streamlit Cloud
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -23,17 +34,11 @@ from src.calculations import (
     get_top_risk_branch,
     get_branch_performance,
     get_top_risk_product,
-    get_star_performers,
     get_portfolio_distribution_by_aging,
-    get_branch_risk_percentage,
-    get_main_driver_product_in_branch,
     get_top_accounts_by_band,
     get_priority_band_summary,
     categorize_by_aging,
     get_officer_performance,
-    get_arrears_time_series,
-    get_trend_for_entity,
-    get_top_movers,
     get_branch_arrears_summary,
     get_product_arrears_summary,
     get_aging_arrears_summary,
@@ -50,6 +55,7 @@ from src.constants import (
     DATA_FOLDER,
 )
 from src.ai_engine import generate_ai_insights, get_ai_health_state
+from src.branch_ai import render_branch_intelligence
 
 # Page configuration
 st.set_page_config(
@@ -369,12 +375,15 @@ def main():
                     git_success_message = None
                     git_error_message = None
 
-                    # 1. Securely fetch the token
-                    token = st.secrets.get("GITHUB_TOKEN")
+                    if not HAS_GIT:
+                        git_error_message = "❌ GitPython library not installed. Please run 'pip install GitPython'."
+                    
+                    # 1. Securely fetch the token if git is available
+                    token = st.secrets.get("GITHUB_TOKEN") if HAS_GIT else None
 
-                    if not token:
+                    if HAS_GIT and not token:
                         git_error_message = "❌ GITHUB_TOKEN not found in Streamlit Secrets."
-                    else:
+                    elif HAS_GIT:
                         try:
                             # Use the current working directory as the repo path
                             repo_path = os.path.dirname(os.path.abspath(__file__))
@@ -553,7 +562,10 @@ def main():
     
     # Charts Section
     st.subheader("📊 Portfolio Analysis Charts")
-
+    
+    if not HAS_PLOTLY:
+        st.error("Plotly is not installed. Visual charts are currently unavailable.")
+        return
     
     
     col_chart1, col_chart2 = st.columns(2)
@@ -787,18 +799,11 @@ def main():
 
             with st.expander("View Full Officer League Table"):
                 st.dataframe(officer_perf, use_container_width=True, column_config=table_config, hide_index=True)
-    
-    # Dynamic Branch Insights
-    if selected_branches and len(selected_branches) == 1:
-        branch = selected_branches[0]
-        risk_pct = get_branch_risk_percentage(df, branch)
-        main_product = get_main_driver_product_in_branch(df_display, branch)
-        
-        st.markdown("### Branch-Specific Insights")
-        st.info(f"**Branch {branch.title()}** currently holds **{risk_pct:.2f}%** of total portfolio risk.")
-        if main_product:
-            st.info(f"**Recommendation:** Immediate focus on **{main_product}**, which is the main driver of arrears in this branch.")
-    
+
+    # 🏢 Branch Intelligence Engine
+    st.markdown("---")
+    render_branch_intelligence(df_display, df, selected_branches)
+
     # Portfolio Distribution by Aging
     st.markdown("---")
     st.subheader("📈 Portfolio Distribution by Aging Buckets")

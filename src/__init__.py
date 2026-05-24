@@ -1,2 +1,1 @@
-# Spread Capital Arrears Analysis System
-__version__ = "1.0.0"
+# Marks src as a package for absolute imports
