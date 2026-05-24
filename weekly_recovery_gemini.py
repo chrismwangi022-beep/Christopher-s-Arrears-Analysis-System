@@ -16,6 +16,59 @@ except ImportError:
 # Fallback for Streamlit environment
 import streamlit as st
 
+def update_historical_snapshots(df: pd.DataFrame):
+    """
+    Builds and updates a daily historical snapshot CSV for branch-level metrics.
+    Ensures persistent tracking of arrears movement over time for AI analysis.
+    """
+    snapshot_file = "historical_branch_snapshots.csv"
+    
+    # Check for mandatory columns
+    required = {'Branch', 'Arrears', 'Report_Date'}
+    if df.empty or not required.issubset(df.columns):
+        return
+
+    # 1. Summarize input data by Date and Branch
+    temp = df.copy()
+    temp['Report_Date'] = pd.to_datetime(temp['Report_Date'], errors='coerce').dt.normalize()
+    temp = temp.dropna(subset=['Report_Date'])
+    
+    if temp.empty:
+        return
+
+    # Identify principle column (handle spelling variation used in project)
+    p_col = 'Principle' if 'Principle' in temp.columns else ('Principal' if 'Principal' in temp.columns else None)
+    
+    # Aggregation
+    summary = temp.groupby(['Report_Date', 'Branch']).agg(
+        Total_Arrears=('Arrears', 'sum'),
+        Total_Principal=(p_col, 'sum') if p_col else ('Arrears', lambda x: 0),
+        Average_Days_Past_Due=('Days', 'mean') if 'Days' in temp.columns else ('Arrears', lambda x: 0),
+        Account_Count=('AccountID', 'count') if 'AccountID' in temp.columns else ('Arrears', 'count')
+    ).reset_index()
+
+    # Calculate Metrics
+    summary['PAR'] = (summary['Total_Arrears'] / summary['Total_Principal']).fillna(0).replace([float('inf'), -float('inf')], 0)
+    summary['Date'] = summary['Report_Date'].dt.strftime('%Y-%m-%d')
+    
+    # Structure per requirements
+    summary = summary[['Date', 'Branch', 'Total_Arrears', 'Total_Principal', 'PAR', 'Average_Days_Past_Due', 'Account_Count']]
+
+    # 2. Persist to CSV (Append or Update)
+    if os.path.exists(snapshot_file):
+        try:
+            hist_df = pd.read_csv(snapshot_file)
+            hist_df['Date'] = hist_df['Date'].astype(str)
+            summary['Date'] = summary['Date'].astype(str)
+            
+            # Combine and remove duplicates (latest data for a date/branch combo wins)
+            combined = pd.concat([hist_df, summary]).drop_duplicates(subset=['Date', 'Branch'], keep='last')
+            combined.to_csv(snapshot_file, index=False)
+        except Exception:
+            summary.to_csv(snapshot_file, index=False)
+    else:
+        summary.to_csv(snapshot_file, index=False)
+
 def verify_gemini_setup() -> dict:
     """
     Diagnostic utility to verify Gemini AI environment configuration.
@@ -90,7 +143,7 @@ def get_previous_week(df: pd.DataFrame) -> pd.DataFrame:
 def build_prompt(branch_name: str, current_week_data: pd.DataFrame, previous_week_data: pd.DataFrame) -> str:
     """
     Generates a structured prompt for Gemini AI following the Recovery Manager persona.
-    Optimized for Gemini 1.5 Flash.
+    Optimized for Gemini 2.5 Flash.
     """
     # Summarize current week data
     daily_stats = current_week_data.groupby('Report_Date')['Arrears'].sum().sort_index()
@@ -182,8 +235,17 @@ def generate_weekly_report(branch_name: str, df: pd.DataFrame) -> str:
     if not api_key:
         return "SYSTEM ERROR: Recovery Intelligence API Key not configured."
 
-    # 1. Filter dataframe by branch
-    branch_df = df[df['Branch'] == branch_name]
+    # 1. Load historical snapshots to provide true weekly movement context
+    snapshot_file = "historical_branch_snapshots.csv"
+    if os.path.exists(snapshot_file):
+        hist_df = pd.read_csv(snapshot_file)
+        # Map summary columns back to names expected by filtering/summarization utilities
+        hist_df = hist_df.rename(columns={'Date': 'Report_Date', 'Total_Arrears': 'Arrears'})
+        branch_df = hist_df[hist_df['Branch'] == branch_name].copy()
+    else:
+        # Fallback to current dashboard view if no history found
+        branch_df = df[df['Branch'] == branch_name]
+
     if branch_df.empty:
         return f"SKIP: No records identified for branch '{branch_name}'."
 

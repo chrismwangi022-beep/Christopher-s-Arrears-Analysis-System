@@ -59,7 +59,7 @@ from src.constants import (
     CHART_CONFIG,
     DATA_FOLDER,
 )
-from weekly_recovery_gemini import generate_weekly_report
+from weekly_recovery_gemini import generate_weekly_report, update_historical_snapshots
 from src.branch_ai import render_branch_intelligence
 
 # Page configuration
@@ -209,6 +209,7 @@ def main():
     # Load data
     with st.spinner("Loading data..."):
         df = load_data()
+        update_historical_snapshots(df)
         st.session_state.df = df
         st.session_state.data_loaded = True
     
