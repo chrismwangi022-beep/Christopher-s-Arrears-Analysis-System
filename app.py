@@ -59,6 +59,7 @@ from src.constants import (
     CHART_CONFIG,
     DATA_FOLDER,
 )
+from weekly_recovery_gemini import generate_weekly_report
 from src.branch_ai import render_branch_intelligence
 
 # Page configuration
@@ -199,6 +200,16 @@ if 'data_loaded' not in st.session_state:
 def load_data():
     """Load and cache data."""
     return load_all_data()
+
+@st.cache_data(ttl=3600)
+def generate_weekly_recovery_reports(df):
+    """Independent logic to pre-generate reports for all branches."""
+    if df.empty: return {}
+    reports = {}
+    unique_branches = df['Branch'].dropna().unique()
+    for b in unique_branches:
+        reports[b] = generate_weekly_report(b, df)
+    return reports
 
 # Main app
 def main():
