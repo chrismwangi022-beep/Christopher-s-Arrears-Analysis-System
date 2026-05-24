@@ -28,7 +28,7 @@ def update_historical_snapshots(df: pd.DataFrame):
     if df.empty or not required.issubset(df.columns):
         return
 
-    # 1. Summarize input data by Date and Branch
+    # 1. Summarize input data by Date, Branch, and Loan Officer
     temp = df.copy()
     temp['Report_Date'] = pd.to_datetime(temp['Report_Date'], errors='coerce').dt.normalize()
     temp = temp.dropna(subset=['Report_Date'])
@@ -40,7 +40,7 @@ def update_historical_snapshots(df: pd.DataFrame):
     p_col = 'Principle' if 'Principle' in temp.columns else ('Principal' if 'Principal' in temp.columns else None)
     
     # Aggregation
-    summary = temp.groupby(['Report_Date', 'Branch']).agg(
+    summary = temp.groupby(['Report_Date', 'Branch', 'Loan_Officer']).agg(
         Total_Arrears=('Arrears', 'sum'),
         Total_Principal=(p_col, 'sum') if p_col else ('Arrears', lambda x: 0),
         Average_Days_Past_Due=('Days', 'mean') if 'Days' in temp.columns else ('Arrears', lambda x: 0),
@@ -52,7 +52,7 @@ def update_historical_snapshots(df: pd.DataFrame):
     summary['Date'] = summary['Report_Date'].dt.strftime('%Y-%m-%d')
     
     # Structure per requirements
-    summary = summary[['Date', 'Branch', 'Total_Arrears', 'Total_Principal', 'PAR', 'Average_Days_Past_Due', 'Account_Count']]
+    summary = summary[['Date', 'Branch', 'Loan_Officer', 'Total_Arrears', 'Total_Principal', 'PAR', 'Average_Days_Past_Due', 'Account_Count']]
 
     # 2. Persist to CSV (Append or Update)
     if os.path.exists(snapshot_file):
@@ -62,7 +62,7 @@ def update_historical_snapshots(df: pd.DataFrame):
             summary['Date'] = summary['Date'].astype(str)
             
             # Combine and remove duplicates (latest data for a date/branch combo wins)
-            combined = pd.concat([hist_df, summary]).drop_duplicates(subset=['Date', 'Branch'], keep='last')
+            combined = pd.concat([hist_df, summary]).drop_duplicates(subset=['Date', 'Branch', 'Loan_Officer'], keep='last')
             combined.to_csv(snapshot_file, index=False)
         except Exception:
             summary.to_csv(snapshot_file, index=False)
@@ -167,6 +167,31 @@ def build_prompt(branch_name: str, current_week_data: pd.DataFrame, previous_wee
     recovery_momentum = "RECOVERING" if net_movement < 0 else "DETERIORATING" if net_movement > 0 else "STAGNANT"
     pressure_index = "CRITICAL" if closing_arrears > peak_arrears * 0.95 else "HIGH"
 
+    # 👤 Loan Officer Performance Calculation
+    all_dates = daily_stats.index.sort_values()
+    start_dt, end_dt = all_dates[0], all_dates[-1]
+    
+    off_metrics = []
+    for off in current_week_data['Loan_Officer'].unique():
+        off_df = current_week_data[current_week_data['Loan_Officer'] == off]
+        start_row = off_df[off_df['Report_Date'] == start_dt]
+        end_row = off_df[off_df['Report_Date'] == end_dt]
+        
+        c_arr = end_row['Arrears'].sum() if not end_row.empty else 0
+        o_arr = start_row['Arrears'].sum() if not start_row.empty else 0
+        off_net = c_arr - o_arr
+        off_dpd = end_row['Average_Days_Past_Due'].iloc[0] if not end_row.empty else 0
+        
+        status = "🟢 Performing Well"
+        if off_net > 0 or off_dpd > 60: status = "🔴 High Risk Performance"
+        elif off_net == 0 and c_arr > 0: status = "🟠 Needs Attention"
+            
+        off_metrics.append({"name": off, "arr": c_arr, "net": off_net, "dpd": off_dpd, "status": status})
+
+    off_metrics.sort(key=lambda x: x['net'], reverse=True)
+    best_officer = min(off_metrics, key=lambda x: x['net'])['name'] if off_metrics else "N/A"
+    worst_officer = max(off_metrics, key=lambda x: x['net'])['name'] if off_metrics else "N/A"
+
     # Previous week comparison
     comparison_note = "No previous week data available for benchmark comparison."
     if not previous_week_data.empty:
@@ -182,30 +207,43 @@ ACT AS: A strict, aggressive, and no-nonsense Recovery Manager for Spread Capita
 TONE: Aggressive, blunt, and plain English ONLY. No corporate jargon. No soft language.
 
 INSTRUCTIONS:
-Generate a FULL detailed report. 
-Do NOT summarize. 
-Do NOT stop early. 
-Complete ALL sections fully.
+Generate a FULL detailed report as a collections command system. 
+Do NOT summarize. Do NOT stop early. Complete ALL sections fully.
 
 METRICS FOR BRANCH: {branch_name.upper()}
 Opening: KSh {opening_arrears:,.0f} | Closing: KSh {closing_arrears:,.0f} | Net: KSh {net_movement:,.0f}
 Peak: KSh {peak_arrears:,.0f} on {peak_date} | Spike: KSh {biggest_spike:,.0f} | Recovery: KSh {biggest_recovery:,.0f}
 Volatility: {volatility_level} | Momentum: {recovery_momentum} | Pressure: {pressure_index}
 
+OFFICER PERFORMANCE SUMMARY:
+{chr(10).join([f"- {m['name']}: Arrears KSh {m['arr']:,.0f} | Net KSh {m['net']:,.0f} | Avg DPD: {m['dpd']:.1f} | {m['status']}" for m in off_metrics])}
+Best Performer: {best_officer} | Worst Performer: {worst_officer}
+
 CONTEXT: {comparison_note}
 
-TASK: Generate a structured performance ultimatum. Inject behavioral commentary (lazy collection patterns) and operational pressure (bonus risks).
+TASK: Generate a structured performance ultimatum. 
+1. Evaluate officers ONLY within their assigned branch portfolio. DO NOT suggest cross-branch assignments.
+2. Use precise language: "High arrears concentration under officer portfolio" or "Low recovery rate compared to branch average".
+3. Inject behavioral commentary and operational pressure (bonus risks).
 
 STRUCTURE (STRICT ADHERENCE REQUIRED FOR ALL SECTIONS):
 
 🚩 [{branch_name.upper()}] – WEEKLY RECOVERY PERFORMANCE ULTIMATUM
 
-🔥 RECOVERY MOMENTUM
-⚠️ PRESSURE INDEX
+👤 LOAN OFFICER PERFORMANCE REVIEW
+Analyze each officer listed above. Classify them (🟢/🟠/🔴) and provide specific recovery instructions for their portfolios. 
+Focus on field visit priorities and escalation triggers.
+
 💀 THE DAMAGE
 📉 WHERE WE FAILED
-🔥 PRESSURE ZONE
+🔥 RECOVERY MOMENTUM
+⚠️ PRESSURE INDEX
+
 🥊 BATTLE PLAN
+Split into:
+- BRANCH-LEVEL ACTIONS: High-level strategic moves.
+- OFFICER-LEVEL ACTIONS: Specific account handling focus per officer group.
+
 ⚠️ WEEK-END WARNING
 ⚡ FINAL WORD
 
