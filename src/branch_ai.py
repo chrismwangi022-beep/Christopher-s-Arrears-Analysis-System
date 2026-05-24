@@ -11,7 +11,7 @@ from src.constants import CURRENCY_SYMBOL, COLORS
 
 def render_branch_intelligence(df_display: pd.DataFrame, df_full: pd.DataFrame, selected_branches: list):
     """Primary entry point to render the dynamic Branch Intelligence Engine."""
-    st.subheader("🏢 Branch Intelligence Engine")
+    st.subheader("🏢 Branch-Specific Insights")
     
     # Detect columns
     b_col = find_column_case_insensitive(df_display, 'Branch') or 'Branch'
@@ -22,32 +22,38 @@ def render_branch_intelligence(df_display: pd.DataFrame, df_full: pd.DataFrame, 
     date_col = find_column_case_insensitive(df_full, 'Report_Date')
 
     # Aggregate metrics for the current selection
+    total_portfolio_arrears = df_full[a_col].sum() if not df_full.empty else 0
     branch_stats = df_display.groupby(b_col).agg({
         a_col: 'sum',
         p_col: 'sum',
         d_col: 'mean'
     }).reset_index()
     branch_stats.columns = ['Branch', 'Arrears', 'Principal', 'Avg_DPD']
+    
+    # Banking-Grade Calculations
     branch_stats['Risk_Ratio'] = branch_stats.apply(lambda x: _safe_divide(x['Arrears'], x['Principal']), axis=1)
+    branch_stats['Contribution_Pct'] = branch_stats['Arrears'] / total_portfolio_arrears if total_portfolio_arrears > 0 else 0
     branch_stats['Status'] = branch_stats['Risk_Ratio'].apply(classify_risk_ratio)
+    branch_stats['Rank'] = branch_stats['Risk_Ratio'].rank(ascending=False).astype(int)
     
     # Determine mode
     unique_branches = branch_stats['Branch'].unique()
     is_all = "All" in selected_branches or len(selected_branches) == 0 or len(unique_branches) > 5
 
     if len(unique_branches) == 1:
-        _render_single_branch_intel(branch_stats.iloc[0], df_display, df_full, b_col, a_col, pr_col, date_col)
+        _render_single_branch_intel(branch_stats.iloc[0], df_display, df_full, b_col, a_col, pr_col, date_col, total_portfolio_arrears)
     elif not is_all:
         _render_multi_branch_intel(branch_stats)
     else:
-        _render_portfolio_branch_intel(branch_stats)
+        _render_portfolio_branch_intel(branch_stats, df_full, b_col, a_col, date_col)
 
-def _render_single_branch_intel(stats, df_branch, df_full, b_col, a_col, pr_col, date_col):
+def _render_single_branch_intel(stats, df_branch, df_full, b_col, a_col, pr_col, date_col, total_global_arrears):
     """Detailed deep-dive for a single selected branch."""
     branch_name = str(stats['Branch']).title()
     
-    # 1. Trend Calculation
+    # 1. Trend Calculation & Deterioration
     trend_str = "→ stable"
+    severity_interpretation = "Healthy"
     if date_col:
         dates = sorted(pd.to_datetime(df_full[date_col]).unique())
         if len(dates) >= 2:
@@ -58,78 +64,120 @@ def _render_single_branch_intel(stats, df_branch, df_full, b_col, a_col, pr_col,
                 if diff > 0.01: trend_str = "↑ worsening"
                 elif diff < -0.01: trend_str = "↓ improving"
 
+    # 2. Severity Interpretation
+    if stats['Avg_DPD'] > 90: severity_interpretation = "🔴 Critical Loss Potential"
+    elif stats['Avg_DPD'] > 60: severity_interpretation = "🟠 Impaired Recovery"
+    elif stats['Avg_DPD'] > 30: severity_interpretation = "🟡 Collection Friction"
+    else: severity_interpretation = "🟢 Early Delinquency"
+
     # 2. Dominant Product
-    top_prod = df_branch.groupby(pr_col)[a_col].sum().idxmax() if not df_branch.empty else "N/A"
+    product_agg = df_branch.groupby(pr_col)[a_col].sum().sort_values(ascending=False)
+    top_prod = product_agg.index[0] if not product_agg.empty else "N/A"
+    prod_concentration = (product_agg.iloc[0] / stats['Arrears']) if stats['Arrears'] > 0 else 0
     
-    # 3. Concentration (Share of display total)
-    total_display_arrears = df_branch[a_col].sum()
+    st.info(f"### 🏢 {branch_name} Branch Analysis")
     
-    st.info(f"**Intelligence Snapshot: {branch_name}**")
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown(f"**Current Outlook:** {stats['Status']}")
-        st.markdown(f"- **Portfolio Quality:** {stats['Risk_Ratio']:.1%} Risk Ratio")
-        st.markdown(f"- **Arrears Trend:** {trend_str}")
-        st.markdown(f"- **Recovery Pressure:** {'🔴 High' if stats['Avg_DPD'] > 60 else '🟡 Moderate' if stats['Avg_DPD'] > 30 else '🟢 Low'} ({stats['Avg_DPD']:.1f} avg days)")
-    with col2:
-        st.markdown("**Risk Drivers:**")
-        st.markdown(f"- **Dominant Product:** {top_prod}")
-        st.markdown(f"- **Concentration:** {branch_name} holds {CURRENCY_SYMBOL} {stats['Arrears']:,.0f} in active arrears.")
-        st.markdown(f"- **Strategic Focus:** {'Halt disbursements' if stats['Risk_Ratio'] >= 0.20 else 'Intensify field visits' if stats['Risk_Ratio'] >= 0.10 else 'Routine Monitoring'}")
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Risk Concentration", f"{stats['Contribution_Pct']:.1%}", help="Branch contribution to total company arrears.")
+    m2.metric("Arrears/Principal", f"{stats['Risk_Ratio']:.1%}", help="Delinquency relative to total disbursed portfolio.")
+    m3.metric("Delinquency Severity", f"{stats['Avg_DPD']:.1f} Days", help="Average age of active arrears.")
+    m4.metric("Status", stats['Status'].split()[-1])
+
+    st.markdown(f"""
+**📌 Executive Analytical Insight:**
+{branch_name} branch shows a **{stats['Contribution_Pct']:.1%}** contribution to total portfolio risk. High arrears combined with elevated average delinquency days (**{stats['Avg_DPD']:.1f} days**) suggests weakened recovery velocity and increased probability of roll-forward into higher PAR buckets.
+
+**🔍 Risk Indicators:**
+- **Operational Status:** {severity_interpretation}
+- **Product Concentration:** **{top_prod}** (accounts for {prod_concentration:.1%} of branch arrears)
+- **Trend Profile:** {trend_str}
+
+**🛠️ Recommended Priority:**
+{'🚨 Immediate legal escalation & asset recovery for core delinquent accounts.' if stats['Avg_DPD'] > 60 else '📞 Intensify telephone follow-ups and guarantor engagement to normalize payments.' if stats['Avg_DPD'] > 30 else '✅ Maintain routine monitoring and early-warning SMS triggers.'}
+""")
 
 def _render_multi_branch_intel(stats):
     """Comparison engine for 2-5 branches."""
-    best = stats.nsmallest(1, 'Risk_Ratio').iloc[0]
-    worst = stats.nlargest(1, 'Risk_Ratio').iloc[0]
+    best_branch = stats.nsmallest(1, 'Risk_Ratio').iloc[0]
+    worst_branch = stats.nlargest(1, 'Risk_Ratio').iloc[0]
     
-    st.warning("**Comparative Branch Intelligence**")
+    st.warning("### 📊 Multi-Branch Comparative Intelligence")
     
-    st.markdown(f"**Performance Gap:** There is a **{(worst['Risk_Ratio'] - best['Risk_Ratio']):.1%}** quality variance between the strongest and weakest selected branches.")
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown(f"✅ **Strongest Portfolio:** {str(best['Branch']).title()}")
-        st.markdown(f"- Ratio: {best['Risk_Ratio']:.1%} ({best['Status']})")
-    with col2:
-        st.markdown(f"⚠️ **Weakest Portfolio:** {str(worst['Branch']).title()}")
-        st.markdown(f"- Ratio: {worst['Risk_Ratio']:.1%} ({worst['Status']})")
-    
-    # List remaining gaps
-    if len(stats) > 2:
-        with st.expander("View Delinquency Severity Ranking"):
-            for _, row in stats.sort_values('Risk_Ratio', ascending=False).iterrows():
-                st.write(f"- {str(row['Branch']).title()}: {row['Risk_Ratio']:.1%} — {row['Status']}")
+    st.markdown(f"**Analytical Summary:** A quality variance of **{(worst_branch['Risk_Ratio'] - best_branch['Risk_Ratio']):.1%}** exists across the selection, indicating significant risk dispersion. Exposure imbalance is primarily driven by **{worst_branch['Branch'].title()}**.")
 
-def _render_portfolio_branch_intel(stats):
+    # Ranking Table
+    display_stats = stats[['Branch', 'Arrears', 'Principal', 'Risk_Ratio', 'Avg_DPD', 'Status']].sort_values('Risk_Ratio', ascending=False)
+    st.dataframe(
+        display_stats.style.format({
+            'Arrears': f'{CURRENCY_SYMBOL} {{:,.0f}}',
+            'Principal': f'{CURRENCY_SYMBOL} {{:,.0f}}',
+            'Risk_Ratio': '{:.2%}',
+            'Avg_DPD': '{:.1f}'
+        }),
+        use_container_width=True,
+        hide_index=True
+    )
+    
+    st.markdown(f"""
+**🛠️ Recovery Prioritization:**
+Resources should be reallocated to **{worst_branch['Branch'].title()}** to mitigate systemic spillover. **{best_branch['Branch'].title()}** serves as the internal benchmark for credit quality control.
+""")
+
+def _render_portfolio_branch_intel(stats, df_full, b_col, a_col, date_col):
     """Aggregated portfolio-wide branch clustering and concentration analysis."""
-    total_arr = stats['Arrears'].sum()
-    stats['Exposure_Share'] = stats['Arrears'] / total_arr if total_arr > 0 else 0
+    st.success("### 🌐 Portfolio-Wide Branch Intelligence")
     
-    st.success("**Portfolio Branch Intelligence**")
+    # Identify Movers
+    fastest_deteriorating = "N/A"
+    healthiest = stats.nsmallest(1, 'Risk_Ratio').iloc[0]['Branch'].title()
+    highest_risk = stats.nlargest(1, 'Risk_Ratio').iloc[0]['Branch'].title()
+    highest_exposure = stats.nlargest(1, 'Arrears').iloc[0]
     
-    # Risk Clustering
-    clusters = stats['Status'].value_counts()
-    cluster_str = " | ".join([f"{k}: {v}" for k, v in clusters.items()])
-    st.markdown(f"**Risk Clustering:** {cluster_str}")
+    if date_col:
+        dates = sorted(pd.to_datetime(df_full[date_col]).unique())
+        if len(dates) >= 2:
+            curr = df_full[pd.to_datetime(df_full[date_col]) == dates[-1]].groupby(b_col)[a_col].sum()
+            prev = df_full[pd.to_datetime(df_full[date_col]) == dates[-2]].groupby(b_col)[a_col].sum()
+            delta = (curr - prev) / prev.replace(0, 1)
+            fastest_deteriorating = delta.idxmax().title() if not delta.empty else "N/A"
 
-    m1, m2 = st.columns(2)
-    with m1:
-        top_exp = stats.nlargest(1, 'Exposure_Share').iloc[0]
-        st.markdown("**Concentration Exposure:**")
-        st.markdown(f"- **{str(top_exp['Branch']).title()}** is the primary exposure hub, carrying **{top_exp['Exposure_Share']:.1%}** of total arrears volume.")
-    
-    with m2:
-        critical_count = len(stats[stats['Risk_Ratio'] >= 0.10])
-        st.markdown("**Systemic Health:**")
-        st.markdown(f"- **{critical_count}** branches are currently exceeding the 10% High Risk threshold.")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Highest Risk", highest_risk)
+    c2.metric("Fastest Worsening", fastest_deteriorating)
+    c3.metric("Healthiest", healthiest)
+    c4.metric("Top Exposure Hub", highest_exposure['Branch'].title())
 
-    with st.expander("Executive Performance Summary"):
-        best_3 = stats.nsmallest(3, 'Risk_Ratio')
-        worst_3 = stats.nlargest(3, 'Risk_Ratio')
-        
-        c_a, c_b = st.columns(2)
-        c_a.write("**Top 3 (Quality)**")
-        for _, r in best_3.iterrows(): c_a.caption(f"{str(r['Branch']).title()}: {r['Risk_Ratio']:.1%}")
-        
-        c_b.write("**Bottom 3 (Risk)**")
-        for _, r in worst_3.iterrows(): c_b.caption(f"{str(r['Branch']).title()}: {r['Risk_Ratio']:.1%}")
+    # Ranking Table with Banking Metrics
+    st.markdown("#### 📊 Branch Ranking Position (By Risk Ratio)")
+    rank_df = stats[['Rank', 'Branch', 'Arrears', 'Principal', 'Risk_Ratio', 'Contribution_Pct', 'Avg_DPD']].sort_values('Rank')
+    st.dataframe(
+        rank_df.style.format({
+            'Arrears': f'{CURRENCY_SYMBOL} {{:,.0f}}',
+            'Principal': f'{CURRENCY_SYMBOL} {{:,.0f}}',
+            'Risk_Ratio': '{:.2%}',
+            'Contribution_Pct': '{:.1%}',
+            'Avg_DPD': '{:.1f}'
+        }),
+        use_container_width=True,
+        hide_index=True
+    )
+    
+    # Executive Commentary
+    critical_count = len(stats[stats['Risk_Ratio'] >= 0.10])
+    concentration_val = highest_exposure['Arrears'] / stats['Arrears'].sum() if stats['Arrears'].sum() > 0 else 0
+    
+    st.markdown(f"""
+#### 🧠 Executive Credit Commentary
+
+**⚖️ Concentration Risk:**
+The portfolio demonstrates significant risk concentration in **{highest_exposure['Branch'].title()}**, which alone accounts for **{concentration_val:.1%}** of the total arrears volume. Any deterioration in this single hub poses a systemic threat to overall PAR targets.
+
+**📈 Branch Imbalance:**
+Currently, **{critical_count}** branches have exceeded the 10% High-Risk threshold. The variance in delinquency severity (Avg DPD) suggests uneven collection performance or localized economic impact rather than a global product failure.
+
+**🎯 Collection Prioritization:**
+Operational focus must prioritize the **{fastest_deteriorating}** branch to arrest further slippage. Resources should be shifted from healthier clusters (e.g., **{healthiest}**) to critical hubs where roll-forward rates are highest.
+
+**⚠️ Operational Concerns:**
+Branches with Risk Ratios above 20% (e.g., **{highest_risk}**) should undergo an immediate credit process audit to identify if current arrears are a result of aggressive disbursement or weak field follow-up.
+""")

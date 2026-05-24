@@ -388,9 +388,10 @@ def main():
                                 repo_path = os.path.dirname(os.path.abspath(__file__))
                                 repo = git.Repo(repo_path)
 
-                                # 2. Build the authenticated URL
+                                # 2. Build the authenticated URL (Safely handle token string for Pylance)
                                 repo_url = "github.com/chrismwangi022-beep/Christopher-s-Arrears-Analysis-System.git"
-                                remote_url = f"https://{token.strip()}@{repo_url}"
+                                safe_token = token.strip() if isinstance(token, str) else ""
+                                remote_url = f"https://{safe_token}@{repo_url}"
 
                                 # Configure remote and reconcile divergent branches
                                 # (Caused by the Heartbeat Action creating remote commits)
@@ -407,7 +408,7 @@ def main():
                                 # don't block local uploads.
                                 try:
                                     repo.git.pull('origin', 'main', rebase=True, X='theirs')
-                                except git.exc.GitCommandError as e:
+                                except git.GitCommandError as e:
                                     # If a rebase conflict occurs, abort to prevent a stuck state
                                     if "rebase" in str(e).lower():
                                         repo.git.rebase("--abort")
@@ -422,7 +423,7 @@ def main():
 
                                 git_success_message = "🚀 GitHub Repository Updated Successfully!"
 
-                            except git.exc.GitCommandError as e:
+                            except git.GitCommandError as e:
                                 if "nothing to commit" in str(e):
                                     git_success_message = "No new file changes to push to GitHub."
                                 else:
@@ -836,7 +837,7 @@ def main():
             with st.expander("View Full Officer League Table"):
                 st.dataframe(officer_perf, use_container_width=True, column_config=table_config, hide_index=True)
 
-    # 🏢 Branch Intelligence Engine
+    # Branch-Specific Insights
     st.markdown("---")
     render_branch_intelligence(df_display, df, selected_branches)
 
