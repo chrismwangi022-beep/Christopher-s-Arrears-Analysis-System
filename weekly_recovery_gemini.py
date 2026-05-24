@@ -163,9 +163,9 @@ def build_prompt(branch_name: str, current_week_data: pd.DataFrame, previous_wee
     biggest_recovery = abs(diffs.min()) if diffs.min() < 0 else 0
     
     # Advanced Local Metrics for AI Context
-    volatility_level = "EXTREME" if biggest_spike > (opening_arrears * 0.15) else "HIGH" if biggest_spike > (opening_arrears * 0.05) else "MODERATE"
-    recovery_momentum = "RECOVERING" if net_movement < 0 else "DETERIORATING" if net_movement > 0 else "STAGNANT"
-    pressure_index = "CRITICAL" if closing_arrears > peak_arrears * 0.95 else "HIGH"
+    volatility_level = "Unstable Performance" if biggest_spike > (opening_arrears * 0.05) else "Stable Performance"
+    recovery_momentum = "Performance is improving" if net_movement < 0 else "Performance is getting weaker" if net_movement > 0 else "Steady"
+    risk_level = "Critical" if closing_arrears > peak_arrears * 0.95 else "Elevated" if net_movement > 0 else "Controlled"
 
     # 👤 Loan Officer Performance Calculation
     all_dates = daily_stats.index.sort_values()
@@ -182,9 +182,9 @@ def build_prompt(branch_name: str, current_week_data: pd.DataFrame, previous_wee
         off_net = c_arr - o_arr
         off_dpd = end_row['Average_Days_Past_Due'].iloc[0] if not end_row.empty else 0
         
-        status = "🟢 Performing Well"
-        if off_net > 0 or off_dpd > 60: status = "🔴 High Risk Performance"
-        elif off_net == 0 and c_arr > 0: status = "🟠 Needs Attention"
+        status = "🟢 Doing well"
+        if off_net > 0 or off_dpd > 60: status = "🔴 Requires close follow-up"
+        elif off_net == 0 and c_arr > 0: status = "🟠 Needs attention"
             
         off_metrics.append({"name": off, "arr": c_arr, "net": off_net, "dpd": off_dpd, "status": status})
 
@@ -198,38 +198,41 @@ def build_prompt(branch_name: str, current_week_data: pd.DataFrame, previous_wee
         prev_avg = previous_week_data['Arrears'].mean()
         curr_avg = current_week_data['Arrears'].mean()
         if curr_avg > prev_avg:
-            comparison_note = f"Arrears are UP vs last week (Avg KSh {curr_avg - prev_avg:,.0f} higher). Situational deterioration."
+            comparison_note = f"Unpaid balances are higher than last week (Average KSh {curr_avg - prev_avg:,.0f} increase). Performance is getting weaker."
         else:
-            comparison_note = f"Arrears are DOWN vs last week (Avg KSh {prev_avg - curr_avg:,.0f} lower). Keep the pressure on."
+            comparison_note = f"Unpaid balances are lower than last week (Average KSh {prev_avg - curr_avg:,.0f} decrease). Performance is improving."
 
     prompt = f"""
-ACT AS: A strict, aggressive, and no-nonsense Recovery Manager for Spread Capital.
-TONE: Aggressive, blunt, and plain English ONLY. No corporate jargon. No soft language.
+ACT AS: A Professional Portfolio Manager for Spread Capital.
+TONE: Professional, respectful, firm, and simple English. Suitable for senior management and loan officers.
 
 INSTRUCTIONS:
-Generate a FULL detailed report as a collections command system. 
-Do NOT summarize. Do NOT stop early. Complete ALL sections fully.
+Generate a structured Weekly Recovery Performance Report. 
+Use clear language and avoid harsh, insulting, or overly dramatic wording.
+Complete ALL sections fully.
 
 METRICS FOR BRANCH: {branch_name.upper()}
 Opening: KSh {opening_arrears:,.0f} | Closing: KSh {closing_arrears:,.0f} | Net: KSh {net_movement:,.0f}
 Peak: KSh {peak_arrears:,.0f} on {peak_date} | Spike: KSh {biggest_spike:,.0f} | Recovery: KSh {biggest_recovery:,.0f}
-Volatility: {volatility_level} | Momentum: {recovery_momentum} | Pressure: {pressure_index}
+Performance Status: {volatility_level} | Momentum: {recovery_momentum} | Risk Level: {risk_level}
 
 OFFICER PERFORMANCE SUMMARY:
 {chr(10).join([f"- {m['name']}: Arrears KSh {m['arr']:,.0f} | Net KSh {m['net']:,.0f} | Avg DPD: {m['dpd']:.1f} | {m['status']}" for m in off_metrics])}
-Best Performer: {best_officer} | Worst Performer: {worst_officer}
+Highest Performance: {best_officer} | Needs Support: {worst_officer}
 
 CONTEXT: {comparison_note}
 
-TASK: Generate a structured performance ultimatum. 
+TASK: Generate a structured performance update. 
 1. Evaluate officers ONLY within their assigned branch portfolio. DO NOT suggest cross-branch assignments.
-2. Use precise language: "High arrears concentration under officer portfolio" or "Low recovery rate compared to branch average".
-3. Inject behavioral commentary and operational pressure (bonus risks).
+2. Use simple English: Use "High unpaid balances" instead of "concentration" and "High amount under responsibility" instead of "exposure".
+3. Provide actionable guidance that is firm but respectful.
 
 STRUCTURE (STRICT ADHERENCE REQUIRED FOR ALL SECTIONS):
 
-🚩 [{branch_name.upper()}] – WEEKLY RECOVERY PERFORMANCE ULTIMATUM
+🚩 [{branch_name.upper()}] – WEEKLY RECOVERY PERFORMANCE REPORT
 
+🔥 RECOVERY MOMENTUM
+⚠️ RISK LEVEL
 👤 LOAN OFFICER PERFORMANCE REVIEW
 Analyze each officer listed above. Classify them (🟢/🟠/🔴) and provide specific recovery instructions for their portfolios. 
 Focus on field visit priorities and escalation triggers.
@@ -331,7 +334,7 @@ def generate_weekly_report(branch_name: str, df: pd.DataFrame) -> str:
         report_text = response.text.strip()
 
         # Safety check: Detect missing end-of-report sections
-        required_markers = ["🥊 BATTLE PLAN", "⚠️ WEEK-END WARNING", "⚡ FINAL WORD"]
+        required_markers = ["🥊 ACTION PLAN", "⚠️ END OF WEEK NOTE", "⚡ FINAL MESSAGE"]
         is_incomplete = not all(marker in report_text for marker in required_markers)
 
         if is_incomplete:
