@@ -580,17 +580,6 @@ def main():
     if 'Report_Date' in chart_df.columns:
         chart_df['Report_Date'] = pd.to_datetime(chart_df['Report_Date'], errors='coerce')
 
-    # Debugging Diagnostics (Temporary)
-    with st.expander("🛠️ Visualization Diagnostics", expanded=False):
-        diag_col1, diag_col2 = st.columns(2)
-        with diag_col1:
-            st.write(f"**Shape:** {chart_df.shape}")
-            st.write("**Null Counts:**")
-            st.write(chart_df[numeric_cols].isnull().sum() if all(c in chart_df.columns for c in numeric_cols) else "Columns missing")
-        with diag_col2:
-            st.write("**Data Types:**")
-            st.write(chart_df.dtypes)
-
     # Charts Section
     st.subheader("📊 Portfolio Analysis Charts")
 
