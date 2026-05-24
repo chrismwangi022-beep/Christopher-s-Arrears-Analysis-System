@@ -95,27 +95,48 @@ def build_prompt(branch_name: str, current_week_data: pd.DataFrame, previous_wee
     # Summarize current week data
     daily_stats = current_week_data.groupby('Report_Date')['Arrears'].sum().sort_index()
 
+    if daily_stats.empty:
+        return "Insufficient data to generate report."
+
     opening_arrears = daily_stats.iloc[0]
     closing_arrears = daily_stats.iloc[-1]
     peak_arrears = daily_stats.max()
+    peak_date = daily_stats.idxmax().strftime('%Y-%m-%d')
     net_movement = closing_arrears - opening_arrears
 
     # Calculate biggest spike and biggest recovery
     diffs = daily_stats.diff().fillna(0)
     biggest_spike = diffs.max()
     biggest_recovery = abs(diffs.min()) if diffs.min() < 0 else 0
+    
+    # Advanced Local Metrics for AI Context
+    volatility_level = "EXTREME" if biggest_spike > (opening_arrears * 0.15) else "HIGH" if biggest_spike > (opening_arrears * 0.05) else "MODERATE"
+    recovery_momentum = "RECOVERING" if net_movement < 0 else "DETERIORATING" if net_movement > 0 else "STAGNANT"
+    pressure_index = "CRITICAL" if closing_arrears > peak_arrears * 0.95 else "HIGH"
 
     # Previous week comparison
     comparison_note = "No previous week data available for benchmark comparison."
     if not previous_week_data.empty:
-        prev_sum = previous_week_data['Arrears'].sum()
-        curr_sum = current_week_data['Arrears'].sum()
-        if curr_sum > prev_sum:
-            comparison_note = f"Arrears have increased by KSh {curr_sum - prev_sum:,.0f} compared to last week. Performance is slipping."
+        prev_avg = previous_week_data['Arrears'].mean()
+        curr_avg = current_week_data['Arrears'].mean()
+        if curr_avg > prev_avg:
+            comparison_note = f"Arrears are UP vs last week (Avg KSh {curr_avg - prev_avg:,.0f} higher). Situational deterioration."
         else:
-            comparison_note = f"Arrears have dropped by KSh {prev_sum - curr_sum:,.0f} since last week, but the current volume is still high."
+            comparison_note = f"Arrears are DOWN vs last week (Avg KSh {prev_avg - curr_avg:,.0f} lower). Keep the pressure on."
 
     prompt = f"""
+ACT AS: Strict, no-nonsense Recovery Manager. Tone: Aggressive, blunt, plain English.
+
+BRANCH: {branch_name.upper()}
+Opening: KSh {opening_arrears:,.0f} | Closing: KSh {closing_arrears:,.0f} | Net: KSh {net_movement:,.0f}
+Peak: KSh {peak_arrears:,.0f} on {peak_date}
+Spike: KSh {biggest_spike:,.0f} | Recovery: KSh {biggest_recovery:,.0f}
+Volatility: {volatility_level} | Momentum: {recovery_momentum} | Pressure: {pressure_index}
+
+CONTEXT: {comparison_note}
+
+TASK: Generate a structured performance ultimatum. NO raw data dumps.
+
 ACT AS: A strict, no-nonsense Recovery Manager for Spread Capital.
 TONE: Aggressive, blunt, and plain English ONLY. No corporate jargon. No soft language.
 
@@ -124,6 +145,7 @@ METRICS FOR BRANCH: {branch_name.upper()}
 - Peak Arrears: KSh {peak_arrears:,.0f}
 - Closing Arrears: KSh {closing_arrears:,.0f}
 - Biggest Daily Spike: KSh {biggest_spike:,.0f}
+- Peak Date: {peak_date}
 - Biggest Daily Recovery: KSh {biggest_recovery:,.0f}
 - Net Movement: KSh {net_movement:,.0f}
 
@@ -188,10 +210,14 @@ def generate_weekly_report(branch_name: str, df: pd.DataFrame) -> str:
     try:
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-1.5-flash')
-        # 5. Send to Gemini
-        response = model.generate_content(prompt)
-        # 6. Return response.text only
-        return response.text
+        
+        # 5. Send to Gemini with safety timeout configuration
+        response = model.generate_content(
+            prompt,
+            request_options={"timeout": 20}
+        )
+        return response.text.strip()
+        
     except Exception:
-        # 7. Handle API failure gracefully with fallback message
-        return "BATTLE PLAN UNAVAILABLE: AI service timeout. Intensify field visits and manual follow-ups immediately."
+        # 7. Faster graceful fallback
+        return "RECOVERY ACTION REQUIRED: AI report timed out. Based on latest data, Net Movement is KSh " + f"{current_week_data['Arrears'].sum() - previous_week_data['Arrears'].sum():,.0f}" + ". Deploy field officers immediately."
