@@ -37,7 +37,7 @@ def verify_gemini_setup() -> dict:
         report["api_key_found"] = True
         try:
             genai.configure(api_key=api_key)
-            model = genai.GenerativeModel('gemini-1.5-flash')
+            model = genai.GenerativeModel('gemini-2.0-flash')
             # Lightweight check for model initialization
             report["model_accessible"] = True
         except Exception as e:
@@ -217,13 +217,25 @@ def generate_weekly_report(branch_name: str, df: pd.DataFrame) -> str:
     # 4. Build prompt
     prompt = build_prompt(branch_name, curr_week, prev_week)
 
+    model_name = "gemini-2.0-flash"
+    init_status = "Initializing"
+
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        
-        # 5. Send to Gemini with safety timeout configuration
+        try:
+            model = genai.GenerativeModel(model_name)
+            init_status = "Successful"
+        except Exception as init_err:
+            init_status = f"Failed: {str(init_err)}"
+            raise init_err
+
+        # 5. Send to Gemini with specific generation config and safety timeout
         response = model.generate_content(
             prompt,
+            generation_config={
+                "temperature": 0.7,
+                "max_output_tokens": 800,
+            },
             request_options={"timeout": 20}
         )
         return response.text.strip()
@@ -234,6 +246,8 @@ def generate_weekly_report(branch_name: str, df: pd.DataFrame) -> str:
 Gemini Error: {str(e)}
 
 DEBUG OUTPUTS:
+- Selected Model: {model_name}
+- Initialization Status: {init_status}
 - Branch Name: {branch_name}
 - Current Week Rows Count: {len(curr_week)}
 - Opening Arrears: KSh {opening_arrears:,.0f}
