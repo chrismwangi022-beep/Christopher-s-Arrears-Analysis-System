@@ -223,6 +223,10 @@ def _clean_metrics(obj: Any) -> Any:
     - nested dicts/lists
     """
 
+    # Return early for standard Python primitives
+    if isinstance(obj, (int, float, str, bool)) or obj is None:
+        return obj
+
     try:
         import numpy as np
 
@@ -235,9 +239,10 @@ def _clean_metrics(obj: Any) -> Any:
     except Exception:
         pass
 
-    # datetime / pandas timestamp
-    if hasattr(obj, "isoformat"):
-        return obj.isoformat()
+    # datetime / pandas timestamp - Using getattr to avoid static analysis warnings
+    iso_method = getattr(obj, "isoformat", None)
+    if iso_method and callable(iso_method):
+        return iso_method()
 
     # dictionaries
     if isinstance(obj, dict):
