@@ -37,7 +37,7 @@ def verify_gemini_setup() -> dict:
         report["api_key_found"] = True
         try:
             genai.configure(api_key=api_key)
-            model = genai.GenerativeModel('gemini-2.0-flash')
+            model = genai.GenerativeModel('gemini-2.5-flash')
             # Lightweight check for model initialization
             report["model_accessible"] = True
         except Exception as e:
@@ -217,11 +217,12 @@ def generate_weekly_report(branch_name: str, df: pd.DataFrame) -> str:
     # 4. Build prompt
     prompt = build_prompt(branch_name, curr_week, prev_week)
 
-    model_name = "gemini-2.0-flash"
+    model_name = "gemini-2.5-flash"
     init_status = "Initializing"
 
     try:
         genai.configure(api_key=api_key)
+        print(f"Using Gemini model: {model_name}")
         try:
             model = genai.GenerativeModel(model_name)
             init_status = "Successful"
