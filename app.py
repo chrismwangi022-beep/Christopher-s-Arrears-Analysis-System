@@ -5,6 +5,7 @@ Main Streamlit Application
 
 import streamlit as st
 import pandas as pd
+<<<<<<< HEAD
 
 try:
     import plotly.express as px
@@ -12,6 +13,10 @@ try:
 except ImportError:
     HAS_PLOTLY = False
 
+=======
+import plotly.graph_objects as go
+import plotly.express as px
+>>>>>>> 57aa0ac92b863aab1d4a114574a56573ecac9dbe
 from datetime import datetime, timedelta
 import sys
 import os
@@ -398,13 +403,21 @@ def main():
                             origin = repo.remote(name='origin')
                             origin.set_url(remote_url)
                             
-                            # Set strategy and user identity for the automated commit
+                            # Set user identity for the automated commit
                             with repo.config_writer() as cw:
                                 cw.set_value("user", "name", "Spread Capital Admin")
                                 cw.set_value("user", "email", "admin@spreadcapital.com")
-                                cw.set_value("pull", "rebase", "true")
-                            
-                            origin.pull("main")
+
+                            # Reconcile divergent branches (caused by the Heartbeat Action)
+                            # Using rebase with -Xtheirs ensures remote heartbeat updates 
+                            # don't block local uploads.
+                            try:
+                                repo.git.pull('origin', 'main', rebase=True, X='theirs')
+                            except git.exc.GitCommandError as e:
+                                # If a rebase conflict occurs, abort to prevent a stuck state
+                                if "rebase" in str(e).lower():
+                                    repo.git.rebase("--abort")
+                                raise e
 
                             # 3. Add and Commit files
                             repo.index.add(["data/"])  # Adds all files in the data folder
@@ -547,51 +560,80 @@ def main():
         if "executive_summary" in ai_results:
             st.markdown(ai_results["executive_summary"])
         
-        tab_risk, tab_rec, tab_br = st.tabs(["🛡️ Risk AI", "🛠️ Recovery AI", "🏢 Branch AI"])
+        tab_risk, tab_rec = st.tabs(["🛡️ Risk AI", "🛠️ Recovery AI"])
         with tab_risk:
             st.markdown(ai_results.get("risk", "Interpretation pending..."))
         with tab_rec:
             st.markdown(ai_results.get("recovery", "Operation strategy pending..."))
-        with tab_br:
-            st.markdown(ai_results.get("branch", "Performance gap analysis pending..."))
             
         st.markdown("---")
         st.caption(f"🤖 Multi-Agent Orchestrator · Active Agents: {len(ai_results)}")
 
     st.markdown("---")
     
+    # --- Robust Preprocessing for Visualization ---
+    # We create a deep copy to ensure no mutation and enforce numeric types
+    chart_df = df_display.copy()
+    
+    numeric_cols = ['Arrears', 'Principle', 'Days', 'TotalBalance']
+    for col in numeric_cols:
+        if col in chart_df.columns:
+            chart_df[col] = pd.to_numeric(chart_df[col], errors='coerce').fillna(0)
+    
+    if 'Report_Date' in chart_df.columns:
+        chart_df['Report_Date'] = pd.to_datetime(chart_df['Report_Date'], errors='coerce')
+
+    # Debugging Diagnostics (Temporary)
+    with st.expander("🛠️ Visualization Diagnostics", expanded=False):
+        diag_col1, diag_col2 = st.columns(2)
+        with diag_col1:
+            st.write(f"**Shape:** {chart_df.shape}")
+            st.write("**Null Counts:**")
+            st.write(chart_df[numeric_cols].isnull().sum() if all(c in chart_df.columns for c in numeric_cols) else "Columns missing")
+        with diag_col2:
+            st.write("**Data Types:**")
+            st.write(chart_df.dtypes)
+
     # Charts Section
     st.subheader("📊 Portfolio Analysis Charts")
+<<<<<<< HEAD
     
     if not HAS_PLOTLY:
         st.error("Plotly is not installed. Visual charts are currently unavailable.")
         return
     
+=======
+>>>>>>> 57aa0ac92b863aab1d4a114574a56573ecac9dbe
     
     col_chart1, col_chart2 = st.columns(2)
     
     with col_chart1:
         # Arrears by Branch
-        branch_totals = get_branch_arrears_summary(df_display)
-        if not branch_totals.empty:
-            fig_branch = px.bar(
-                x=branch_totals.index,
-                y=branch_totals.values,
-                text=[f"{CURRENCY_SYMBOL} {val:,.0f}" for val in branch_totals.values],
-                labels={'x': 'Branch', 'y': 'Arrears Amount'}
-            )
-            fig_branch.update_traces(marker_color=COLORS['accent_cyan'], textposition='outside')
+        branch_totals = get_branch_arrears_summary(chart_df)
+        if not branch_totals.empty and branch_totals.sum() > 0:
+            fig_branch = go.Figure(data=[
+                go.Bar(
+                    x=branch_totals.index,
+                    y=branch_totals.values,
+                    marker_color=COLORS['accent_cyan'],
+                    text=[f"{CURRENCY_SYMBOL} {val:,.0f}" for val in branch_totals.values],
+                    textposition='outside',
+                )
+            ])
             grand_total = branch_totals.sum()
             fig_branch.update_layout(
                 title=f"Arrears by Branch<br><sub>Grand Total Arrears: {CURRENCY_SYMBOL} {grand_total:,.0f}</sub>",
                 height=400,
                 dragmode='pan',
             )
+            st.plotly_chart(fig_branch, use_container_width=True, config={'scrollZoom': False})
+        else:
+            st.warning("No branch-wise arrears data available for plotting.")
     
     with col_chart2:
         # Arrears by Product - Pie chart (JENGA vs DUMISHA vs others)
-        product_totals = get_product_arrears_summary(df_display)
-        if not product_totals.empty:
+        product_totals = get_product_arrears_summary(chart_df)
+        if not product_totals.empty and product_totals['Arrears'].sum() > 0:
             # Highlight JENGA and DUMISHA explicitly, others remain separate
             fig_product = px.pie(
                 product_totals,
@@ -606,14 +648,16 @@ def main():
             )
             fig_product.update_layout(dragmode='pan')
             st.plotly_chart(fig_product, use_container_width=True, config={'scrollZoom': False})
+        else:
+            st.warning("No product-wise arrears data available for plotting.")
 
     
     
     # Arrears by Aging
     st.subheader("Arrears by Aging Buckets")
-    aging_totals = get_aging_arrears_summary(df_display)
+    aging_totals = get_aging_arrears_summary(chart_df)
     
-    if not aging_totals.empty:
+    if not aging_totals.empty and aging_totals.sum() > 0:
         # Color mapping for aging buckets
         color_map = {
             'Early Warning (1-30)': COLORS['accent_yellow'],
@@ -638,6 +682,8 @@ def main():
             dragmode='pan',
         )
         st.plotly_chart(fig_aging, use_container_width=True, config={'scrollZoom': False})
+    else:
+        st.info("No arrears found in aging buckets to display.")
     
     st.markdown("---")
     
@@ -799,10 +845,180 @@ def main():
 
             with st.expander("View Full Officer League Table"):
                 st.dataframe(officer_perf, use_container_width=True, column_config=table_config, hide_index=True)
+<<<<<<< HEAD
 
     # 🏢 Branch Intelligence Engine
     st.markdown("---")
     render_branch_intelligence(df_display, df, selected_branches)
+=======
+    
+    # =========================================================
+    # BRANCH-SPECIFIC AI INSIGHTS
+    # Only show when specific branches are selected
+    # =========================================================
+
+    if (
+        selected_branches
+        and "All" not in selected_branches
+    ):
+
+        st.markdown("---")
+        st.subheader("🏢 Branch-Specific Insights")
+
+        selected_branch_df = df_display[
+            df_display["Branch"].isin(selected_branches)
+        ]
+
+        if not selected_branch_df.empty:
+
+            # =====================================================
+            # SINGLE BRANCH ANALYSIS
+            # =====================================================
+
+            if len(selected_branches) == 1:
+
+                branch = selected_branches[0]
+
+                total_arrears = selected_branch_df["Arrears"].sum()
+
+                total_principal = (
+                    selected_branch_df["Principle"].sum()
+                )
+
+                risk_ratio = (
+                    total_arrears / total_principal
+                    if total_principal > 0 else 0
+                )
+
+                avg_days = (
+                    selected_branch_df["Days"]
+                    .fillna(0)
+                    .mean()
+                )
+
+                top_product = (
+                    selected_branch_df.groupby("Product")["Arrears"]
+                    .sum()
+                    .sort_values(ascending=False)
+                    .index[0]
+                )
+
+                status = (
+                    "🔴 Critical"
+                    if risk_ratio > 0.15
+                    else "🟠 Watchlist"
+                    if risk_ratio > 0.08
+                    else "🟢 Healthy"
+                )
+
+                st.info(f"""
+### 🏢 {branch.upper()} Branch Analysis
+
+- **Total Arrears:** {CURRENCY_SYMBOL} {total_arrears:,.0f}
+- **Portfolio Exposure Ratio:** {risk_ratio:.2%}
+- **Average Days Past Due:** {avg_days:.1f}
+- **Main Risk Product:** {top_product}
+- **Risk Status:** {status}
+
+### 📌 AI Insight
+{branch.title()} branch currently shows a portfolio risk ratio of
+{risk_ratio:.2%} with arrears concentration mainly driven by
+{top_product} loans.
+
+Priority focus should be on delinquent accounts above
+30 days to prevent migration into critical aging buckets.
+""")
+
+            # =====================================================
+            # MULTI-BRANCH COMPARISON
+            # =====================================================
+
+            else:
+
+                branch_summary = (
+                    selected_branch_df
+                    .groupby("Branch")
+                    .agg({
+                        "Arrears": "sum",
+                        "Principle": "sum",
+                        "Days": "mean"
+                    })
+                    .reset_index()
+                )
+
+                branch_summary["Risk_Ratio"] = (
+                    branch_summary["Arrears"]
+                    / branch_summary["Principle"]
+                )
+
+                branch_summary = branch_summary.sort_values(
+                    by="Risk_Ratio",
+                    ascending=False
+                )
+
+                worst_branch = branch_summary.iloc[0]
+                best_branch = branch_summary.iloc[-1]
+
+                st.warning(f"""
+### 📊 Multi-Branch Risk Comparison
+
+#### 🔴 Highest Risk Branch
+**{worst_branch['Branch']}**
+- Arrears: {CURRENCY_SYMBOL} {worst_branch['Arrears']:,.0f}
+- Risk Ratio: {worst_branch['Risk_Ratio']:.2%}
+
+#### 🟢 Best Performing Branch
+**{best_branch['Branch']}**
+- Arrears: {CURRENCY_SYMBOL} {best_branch['Arrears']:,.0f}
+- Risk Ratio: {best_branch['Risk_Ratio']:.2%}
+
+### 📌 Portfolio Comparison Insight
+
+The selected branches show significant variation in
+portfolio quality.
+
+{worst_branch['Branch']} currently has the highest
+arrears-to-principal exposure ratio among the selected
+branches and requires immediate collection focus.
+
+{best_branch['Branch']} demonstrates stronger portfolio
+control with lower relative delinquency levels.
+""")
+
+                display_summary = branch_summary.copy()
+
+                display_summary["Arrears"] = (
+                    display_summary["Arrears"]
+                    .apply(lambda x: f"{CURRENCY_SYMBOL} {x:,.0f}")
+                )
+
+                display_summary["Principle"] = (
+                    display_summary["Principle"]
+                    .apply(lambda x: f"{CURRENCY_SYMBOL} {x:,.0f}")
+                )
+
+                display_summary["Risk_Ratio"] = (
+                    display_summary["Risk_Ratio"]
+                    .apply(lambda x: f"{x:.2%}")
+                )
+
+                display_summary["Days"] = (
+                    display_summary["Days"]
+                    .apply(lambda x: f"{x:.1f}")
+                )
+
+                st.dataframe(
+                    display_summary.rename(columns={
+                        "Branch": "Branch",
+                        "Arrears": "Total Arrears",
+                        "Principle": "Total Principal",
+                        "Risk_Ratio": "Risk Ratio",
+                        "Days": "Avg Days Past Due"
+                    }),
+                    use_container_width=True,
+                    hide_index=True
+                )
+>>>>>>> 57aa0ac92b863aab1d4a114574a56573ecac9dbe
 
     # Portfolio Distribution by Aging
     st.markdown("---")
@@ -845,9 +1061,14 @@ def main():
     if selected_products and "All" not in selected_products:
         df_trend = df_trend[df_trend['Product'].isin(selected_products)]
 
-    if 'Report_Date' in df.columns:
+    # Clean trend data
+    if 'Report_Date' in df_trend.columns:
+        df_trend['Report_Date'] = pd.to_datetime(df_trend['Report_Date'], errors='coerce')
+        df_trend['Arrears'] = pd.to_numeric(df_trend['Arrears'], errors='coerce').fillna(0)
+        df_trend = df_trend.dropna(subset=['Report_Date'])
+
         trend_grp = get_filtered_trend_data(df_trend, group_choice)
-        if not trend_grp.empty:
+        if not trend_grp.empty and trend_grp['Arrears'].sum() > 0:
             try:
                 palette = [COLORS['accent_cyan'], COLORS['accent_orange'], COLORS['accent_amber'], COLORS['accent_red'], COLORS['accent_yellow']]
                 fig_daily = px.line(
