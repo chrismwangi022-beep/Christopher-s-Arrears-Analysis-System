@@ -3,14 +3,18 @@ Spread Capital Limited — Weekly Recovery Intelligence Engine
 Standalone Gemini AI Agent
 """
 
+import os
+import pandas as pd
+from datetime import datetime, timedelta
+
 try:
     import google.generativeai as genai
     HAS_GOOGLE_AI = True
 except ImportError:
     HAS_GOOGLE_AI = False
-import pandas as pd
-import os
-from datetime import datetime, timedelta
+
+# Fallback for Streamlit environment
+import streamlit as st
 
 def get_current_week(df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -129,10 +133,16 @@ def generate_weekly_report(branch_name: str, df: pd.DataFrame) -> str:
     """
     # Safeguard for missing library
     if not HAS_GOOGLE_AI:
-        return "SYSTEM ERROR: The 'google-generativeai' library is not installed in the environment."
+        return "SYSTEM ERROR: The 'google-generativeai' library is not resolved. Please run 'pip install google-generativeai'."
 
-    # API Key retrieval from environment
+    # API Key retrieval with fallback to Streamlit secrets
     api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        try:
+            api_key = st.secrets.get("GEMINI_API_KEY")
+        except Exception:
+            api_key = None
+            
     if not api_key:
         return "SYSTEM ERROR: Recovery Intelligence API Key not configured."
 
