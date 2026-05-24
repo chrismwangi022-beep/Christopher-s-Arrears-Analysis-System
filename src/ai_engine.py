@@ -31,7 +31,7 @@ try:
 except ImportError:
     HAS_OPENAI = False
 
-from src.ai_agents import (
+from .ai_agents import (
     RISK_ANALYST_SYSTEM_PROMPT,
     BRANCH_PERFORMANCE_ANALYST_PROMPT,
     RISK_ANALYSIS_AGENT_PROMPT,
@@ -337,7 +337,7 @@ def generate_weekly_recovery_reports(df: pd.DataFrame) -> dict[str, str]:
     if df.empty:
         return {}
 
-    from src.calculations import find_column_case_insensitive
+    from .calculations import find_column_case_insensitive
     b_col = find_column_case_insensitive(df, 'Branch') or 'Branch'
     a_col = find_column_case_insensitive(df, 'Arrears') or 'Arrears'
     d_col = find_column_case_insensitive(df, 'Report_Date') or 'Report_Date'

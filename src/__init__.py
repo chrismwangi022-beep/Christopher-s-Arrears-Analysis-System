@@ -1,1 +1,1 @@
-# Marks src as a package for absolute imports
+"""Spread Capital Arrears Analysis - Internal Package"""

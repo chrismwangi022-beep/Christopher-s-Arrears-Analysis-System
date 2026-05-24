@@ -3,7 +3,11 @@ Spread Capital Limited — Weekly Recovery Intelligence Engine
 Standalone Gemini AI Agent
 """
 
-import google.generativeai as genai
+try:
+    import google.generativeai as genai
+    HAS_GOOGLE_AI = True
+except ImportError:
+    HAS_GOOGLE_AI = False
 import pandas as pd
 import os
 from datetime import datetime, timedelta
@@ -123,6 +127,10 @@ def generate_weekly_report(branch_name: str, df: pd.DataFrame) -> str:
     Main entry point for generating a report. Filters data and calls Gemini.
     Strictly backend logic; no Streamlit dependencies.
     """
+    # Safeguard for missing library
+    if not HAS_GOOGLE_AI:
+        return "SYSTEM ERROR: The 'google-generativeai' library is not installed in the environment."
+
     # API Key retrieval from environment
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
