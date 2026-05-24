@@ -18,7 +18,7 @@ from __future__ import annotations
 import json
 import time
 import random
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 import streamlit as st
@@ -35,6 +35,7 @@ from src.ai_agents import (
     BRANCH_PERFORMANCE_ANALYST_PROMPT,
     RISK_ANALYSIS_AGENT_PROMPT,
     RECOVERY_STRATEGY_AGENT_PROMPT,
+    RECOVERY_MANAGER_PROMPT,
 )
 
 # ─────────────────────────────────────────────
@@ -319,3 +320,98 @@ def generate_ai_insights(metrics: dict[str, Any]) -> dict[str, str]:
     except Exception:
         # Absolute safety net: Switch to local insights on any failure
         return generate_local_insights(metrics)
+
+@st.cache_data(ttl=3600, show_spinner="🚨 Preparing Weekly Recovery Intelligence...")
+def generate_weekly_recovery_reports(df: pd.DataFrame) -> dict[str, str]:
+    """
+    Pre-generates aggressive recovery reports for all branches.
+    Analyzes dynamic weekly windows (Monday to Current Day).
+    """
+    if df.empty:
+        return {}
+
+    from src.calculations import find_column_case_insensitive
+    b_col = find_column_case_insensitive(df, 'Branch') or 'Branch'
+    a_col = find_column_case_insensitive(df, 'Arrears') or 'Arrears'
+    d_col = find_column_case_insensitive(df, 'Report_Date') or 'Report_Date'
+
+    if d_col not in df.columns:
+        return {}
+
+    # 1. Setup Time Window (Monday to Now)
+    now = datetime.now()
+    monday = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    # 2. Process all branches
+    reports = {}
+    unique_branches = df[b_col].dropna().unique()
+
+    for branch in unique_branches:
+        branch_df = df[df[b_col] == branch].copy()
+        branch_df[d_col] = pd.to_datetime(branch_df[d_col])
+        
+        # Weekly Window Data
+        this_week = branch_df[branch_df[d_col] >= pd.Timestamp(monday)]
+        if this_week.empty:
+            continue
+
+        daily_totals = this_week.groupby(d_col)[a_col].sum().sort_index()
+        
+        # Metric Calculations
+        opening_val = float(daily_totals.iloc[0])
+        closing_val = float(daily_totals.iloc[-1])
+        peak_val = float(daily_totals.max())
+        peak_date = daily_totals.idxmax().strftime('%Y-%m-%d')
+        net_move = closing_val - opening_val
+        
+        # Daily movement analysis
+        diffs = daily_totals.diff().fillna(0)
+        max_spike = float(diffs.max())
+        max_recovery = float(abs(diffs.min())) if diffs.min() < 0 else 0.0
+
+        metrics_bundle = {
+            "branch": str(branch),
+            "week_range": f"{monday.strftime('%b %d')} - {now.strftime('%b %d, %Y')}",
+            "opening_arrears": opening_val,
+            "closing_arrears": closing_val,
+            "peak_arrears": peak_val,
+            "peak_date": peak_date,
+            "net_movement": net_move,
+            "largest_spike": max_spike,
+            "strongest_recovery": max_recovery,
+            "daily_history": daily_totals.to_dict()
+        }
+
+        # 3. Call Recovery Manager AI
+        reports[branch] = _execute_recovery_manager_call(metrics_bundle)
+
+    return reports
+
+def _execute_recovery_manager_call(data: dict) -> str:
+    """Private runner for the Recovery Manager Agent."""
+    if not HAS_OPENAI or not st.secrets.get("OPENROUTER_API_KEY"):
+        return f"🚨 [LOCAL FALLBACK] Recovery Report for {data['branch']}: Week movement is {data['net_movement']:,.0f}. Immediate field action required."
+
+    if "ai_client" not in st.session_state:
+        try:
+            st.session_state.ai_client = OpenAI(
+                base_url="https://openrouter.ai/api/v1",
+                api_key=st.secrets["OPENROUTER_API_KEY"],
+            )
+        except:
+            return "⚠️ Connection Error"
+
+    try:
+        # Using deepseek-chat for aggressive reasoning
+        response = st.session_state.ai_client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[
+                {"role": "system", "content": RECOVERY_MANAGER_PROMPT},
+                {"role": "user", "content": f"WEEKLY METRICS:\n{json.dumps(data, indent=2)}"}
+            ],
+            temperature=0.5,
+            max_tokens=1000
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        return f"🛡️ Recovery AI Busy: {str(e)}"

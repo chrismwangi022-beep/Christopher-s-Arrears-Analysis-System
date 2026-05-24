@@ -20,6 +20,7 @@ except ImportError:
 from src.ai_agents.branch_agent import BRANCH_AGENT_SYSTEM_PROMPT, BRANCH_PERFORMANCE_ANALYST_PROMPT
 from src.ai_agents.risk_agent import RISK_ANALYSIS_AGENT_PROMPT
 from src.ai_agents.recovery_agent import RECOVERY_STRATEGY_AGENT_PROMPT
+from src.ai_agents.recovery_manager_agent import RECOVERY_MANAGER_PROMPT
 
 RISK_ANALYST_SYSTEM_PROMPT = """
 SPREAD CAPITAL LIMITED — ARREARS AI ENGINE

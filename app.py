@@ -46,6 +46,11 @@ from src.calculations import (
     get_officer_ranking_split,
     get_standard_metrics_package,
 )
+from src.ai_engine import (
+    generate_ai_insights, 
+    get_ai_health_state, 
+    generate_weekly_recovery_reports
+)
 from src.constants import (
     COLORS,
     AGING_BUCKETS,
@@ -916,6 +921,36 @@ def main():
     else:
         st.info("No `Report_Date` column in dataset; cannot plot trends.")
     
+    # --- 🚨 Weekly Recovery Intelligence Report Section ---
+    if len(selected_branches) == 1 and "All" not in selected_branches:
+        st.markdown("---")
+        branch_name = selected_branches[0]
+        
+        # This call is cached; will run once for all branches then return instantly
+        with st.spinner(f"📡 Accessing Recovery Command for {branch_name}..."):
+            weekly_reports = generate_weekly_recovery_reports(df)
+        
+        if branch_name in weekly_reports:
+            report_content = weekly_reports[branch_name]
+            
+            st.container(border=True).subheader("🚨 Weekly Recovery Intelligence Report")
+            
+            # Display the report with operational styling
+            st.markdown(report_content)
+            
+            st.markdown("---")
+            st.caption("📱 **WhatsApp-Ready Intelligence**")
+            
+            # Copy-ready text area
+            st.text_area(
+                label="Field Communication (Copy below)",
+                value=report_content,
+                height=300,
+                key="recovery_report_text"
+            )
+            
+            if st.button("📋 Copy Weekly Report", use_container_width=True):
+                st.toast("Report ready for WhatsApp pasting!")
 
 if __name__ == "__main__":
     main()
