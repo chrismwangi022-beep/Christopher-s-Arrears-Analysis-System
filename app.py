@@ -112,26 +112,45 @@ st.markdown("""
     
     /* Fix File Uploader Background & Text in Sidebar */
     [data-testid="stSidebar"] [data-testid="stFileUploader"] section {
-        background-color: #1E2A5E !important;
-        border: 1px dashed #FFFFFF !important;
+        background-color: rgba(0, 0, 0, 0.2) !important;
+        border: 1px dashed rgba(255, 255, 255, 0.3) !important;
+        border-radius: 12px !important;
+        padding: 1rem !important;
+        transition: border-color 0.3s ease;
     }
-    [data-testid="stSidebar"] [data-testid="stFileUploader"] button {
+    [data-testid="stSidebar"] [data-testid="stFileUploader"] section:hover {
+        border-color: #00D1FF !important;
+    }
+
+    /* Clean Upload Button - Fixes "uploadupload" duplication */
+    [data-testid="stSidebar"] [data-testid="stFileUploader"] button[kind="secondary"] {
         background-color: #2A3A6E !important;
-        color: #FFFFFF !important;
-        border: 1px solid #FFFFFF !important;
+        color: #00D1FF !important;
+        border: 1px solid #00D1FF !important;
+        border-radius: 6px !important;
+        font-weight: 600 !important;
     }
     
-    /* Fix Uploaded File Info (Filename, Size) & Icons in Sidebar */
-    [data-testid="stSidebar"] [data-testid="stFileUploader"] div,
-    [data-testid="stSidebar"] [data-testid="stFileUploader"] span, /* Covers prompt text and file names */
-    [data-testid="stSidebar"] [data-testid="stFileUploader"] small { /* Covers file size limit text */
-        color: #FFFFFF !important;
-        font-family: 'Calibri', sans-serif !important;
-    }
-    [data-testid="stSidebar"] [data-testid="stFileUploader"] svg {
-        fill: #FFFFFF !important;
+    /* Premium File Item Cards */
+    [data-testid="stSidebar"] [data-testid="stFileUploaderFile"] {
+        background-color: #2A3A6E !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        border-left: 4px solid #00D1FF !important;
+        border-radius: 6px !important;
+        margin-bottom: 8px !important;
+        padding: 8px !important;
     }
     
+    /* Filename & Metadata Visibility */
+    [data-testid="stSidebar"] [data-testid="stFileUploaderFileName"] {
+        color: #FFFFFF !important;
+        font-weight: 700 !important;
+        font-size: 0.95rem !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stFileUploaderFile"] small {
+        color: #CBD5E0 !important;
+        opacity: 1 !important;
+    }
     /* Fix Standard Buttons in Sidebar (e.g. Save button) */
     [data-testid="stSidebar"] .stButton button {
         background-color: #2A3A6E !important;
