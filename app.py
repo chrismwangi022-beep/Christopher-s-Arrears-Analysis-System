@@ -249,9 +249,9 @@ def main():
     # Header with Logo
     col_h1, col_h2 = st.columns([1, 8])
     with col_h1:
-        st.image("assets/sc_logo_header.png", width=40)
+        st.image("assets/sc_logo_header.png", width=100)
     with col_h2:
-        st.title("AI Portfolio Intelligence Dashboard")
+        st.title("Spread Capital Arrears Analysis System")
     st.markdown("---")
     
     # Load data
@@ -266,7 +266,7 @@ def main():
         return
     
     # Sidebar Branding
-    st.sidebar.image("assets/sc_logo_sidebar.png", width=80)
+    st.sidebar.image("assets/sc_logo_sidebar.png", width=200)
     st.sidebar.markdown("---")
 
     # Timeline -> Calendar: strict single-date filter using Report_Date
