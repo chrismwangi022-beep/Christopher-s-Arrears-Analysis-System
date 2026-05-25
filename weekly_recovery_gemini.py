@@ -232,9 +232,9 @@ def build_weekly_summary(branch_name: str, df: pd.DataFrame) -> dict:
             })
 
         off_metrics.sort(key=lambda x: x['net'], reverse=True)
-        worst_3 = off_metrics[:3]
-        remaining = [m for m in off_metrics if m not in worst_3]
-        best_2 = sorted(remaining, key=lambda x: x['net'])[:2]
+        worst_officers = off_metrics[:3]
+        remaining = [m for m in off_metrics if m not in worst_officers]
+        best_officers = sorted(remaining, key=lambda x: x['net'])[:2]
 
         # Key Concern Logic
         if not prev_week.empty:
@@ -255,12 +255,12 @@ def build_weekly_summary(branch_name: str, df: pd.DataFrame) -> dict:
         "trend_class": trend_class,
         "mom_class": mom_class,
         "reversal": reversal,
-        "peak_arrears": daily_stats.max(),
-        "peak_date": daily_stats.idxmax().strftime('%Y-%m-%d'),
+        "peak_arrears": peak_arrears,
+        "peak_date": peak_date,
         "spike_info": {"amount": max_spike, "date": spike_date, "severity": spike_severity},
-        "recovery": abs(diffs.min()) if diffs.min() < 0 else 0,
-        "worst_officers": worst_3,
-        "best_officers": best_2,
+        "recovery": recovery,
+        "worst_officers": worst_officers,
+        "best_officers": best_officers,
         "key_concern": key_concern,
         "low_activity_flag": low_activity_flag # Indicate if current week had no activity
     }
