@@ -922,14 +922,43 @@ def main():
     else:
         st.info("No `Report_Date` column in dataset; cannot plot trends.")
     
-    # --- 🚨 Weekly Recovery Intelligence Report Section ---
+    # --- 📡 Branch Recovery Radar Integration ---
+    # Placement: Below Trend Analysis, Above Weekly Report.
+    # Visibility: Only renders when exactly one branch is selected.
     if len(selected_branches) == 1 and "All" not in selected_branches:
-        st.markdown("---")
         branch_name = selected_branches[0]
         
+        # Initialize cache if missing to prevent attribute errors
         if "weekly_reports_cache" not in st.session_state:
             st.session_state["weekly_reports_cache"] = {}
+            
+        st.markdown("---")
+        st.subheader("📡 Branch Recovery Radar")
+        
+        # Match the cache key logic used in the Weekly Report generator
+        now = pd.Timestamp.now().normalize()
+        monday_date = (now - pd.Timedelta(days=now.weekday())).strftime('%Y-%m-%d')
+        cache_key = f"{branch_name}_{monday_date}"
+        
+        report_content = st.session_state["weekly_reports_cache"].get(cache_key)
 
+        if report_content and "📡 BRANCH RECOVERY RADAR" in report_content:
+            # Extract the specific Radar intelligence section
+            radar_payload = report_content.split("📡 BRANCH RECOVERY RADAR")[-1]
+            
+            # Ensure clean rendering by stopping before the final message
+            for terminator in ["⚡ FINAL MESSAGE", "⚡ Final Message"]:
+                if terminator in radar_payload:
+                    radar_payload = radar_payload.split(terminator)[0]
+            
+            with st.container(border=True):
+                st.markdown(radar_payload.strip())
+        else:
+            st.info("Radar Offline: Operational intelligence is generated as part of the Weekly Recovery Report. Please generate the report below to activate the radar.")
+
+    # --- 🚨 Weekly Recovery Intelligence Report Section ---
+    if len(selected_branches) == 1 and "All" not in selected_branches:
+        branch_name = selected_branches[0]
         st.subheader("🚨 Weekly Recovery Intelligence Report")
         
         # Determine current week start (Monday) for cache keying to support weekly resets
