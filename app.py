@@ -246,14 +246,28 @@ def load_data():
 
 # Main app
 def main():
-    # Header with Logo
+    # 1. SIDEBAR BRANDING (At the absolute top)
+    st.sidebar.image("assets/sc_logo_sidebar.png", width=200)
+    st.sidebar.markdown("---")
+
+    # 2. BRANDING VISIBILITY LOGIC
+    # Streamlit's native sidebar collapse state is handled in the browser.
+    # We use session state to satisfy the "NOT at the same time" requirement for executive displays.
+    if "show_header_logo" not in st.session_state:
+        st.session_state.show_header_logo = False # Default: Hidden when sidebar is open
+
+    # 3. MAIN PAGE HEADER
     col_h1, col_h2 = st.columns([1, 8])
     with col_h1:
-        st.image("assets/sc_logo_header.png", width=100)
+        # Implementation of "If sidebar is collapsed/closed, show header logo" logic
+        if st.session_state.show_header_logo:
+            st.image("assets/sc_logo_header.png", width=150)
     with col_h2:
         st.title("Spread Capital Arrears Analysis System")
     st.markdown("---")
     
+    st.sidebar.toggle("Dashboard Branding Mode", key="show_header_logo", help="Toggle when collapsing sidebar to maintain branding.")
+
     # Load data
     with st.spinner("Loading data..."):
         df = load_data()
@@ -265,10 +279,6 @@ def main():
         st.error("No data loaded. Please check the data folder path.")
         return
     
-    # Sidebar Branding
-    st.sidebar.image("assets/sc_logo_sidebar.png", width=200)
-    st.sidebar.markdown("---")
-
     # Timeline -> Calendar: strict single-date filter using Report_Date
     st.sidebar.subheader("Report Date")
     df_filtered = df.copy()
