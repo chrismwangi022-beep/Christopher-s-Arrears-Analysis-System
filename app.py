@@ -78,10 +78,21 @@ st.markdown("""
     /* Sidebar styling */
     [data-testid="stSidebar"] {
         background-color: #1E2A5E;
+        padding: 1.5rem 1rem !important;
     }
     
+    /* Global Sidebar Spacing Fix */
+    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
+        gap: 1.2rem !important;
+    }
+
     /* Sidebar Headers and Labels - White & Calibri */
-    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3, 
+    [data-testid="stSidebar"] h1 {
+        font-size: 1.6rem !important;
+        letter-spacing: -0.02em !important;
+        margin-bottom: 0.5rem !important;
+    }
+    [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3, 
     [data-testid="stSidebar"] label, [data-testid="stSidebar"] p, [data-testid="stSidebar"] strong {
         color: #FFFFFF !important;
         font-family: 'Calibri', sans-serif !important;
@@ -128,11 +139,23 @@ st.markdown("""
         border: 1px solid #FFFFFF !important;
     }
     
-    /* Fix Alerts (Warning, Success, Error) in Sidebar */
+    /* Premium Operational Status Cards (Alerts) */
     [data-testid="stSidebar"] [data-testid="stAlert"] {
-        background-color: #2A3A6E !important;
+        background-color: rgba(42, 58, 110, 0.8) !important;
         color: #FFFFFF !important;
-        border: 1px solid #FFFFFF !important;
+        border: none !important;
+        border-left: 5px solid #00D1FF !important;
+        border-radius: 4px !important;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.2) !important;
+    }
+    [data-testid="stSidebar"] [data-status="success"] {
+        border-left-color: #2ECC71 !important;
+    }
+    [data-testid="stSidebar"] [data-status="warning"] {
+        border-left-color: #F1C40F !important;
+    }
+    [data-testid="stSidebar"] [data-status="error"] {
+        border-left-color: #E74C3C !important;
     }
     
     /* KPI Cards */
@@ -325,14 +348,14 @@ def main():
     st.sidebar.metric("Records", len(df_display))
     
     st.sidebar.markdown("---")
-    st.sidebar.title("Data Management")
+    st.sidebar.header("⚙️ Operations Control")
     
     # Display success message if file was saved in previous run
     if 'upload_success' in st.session_state:
         st.sidebar.success(st.session_state.upload_success)
         del st.session_state['upload_success']
     
-    password_input = st.sidebar.text_input("Enter Admin Password", type="password")
+    password_input = st.sidebar.text_input("Administrator Credentials", type="password", placeholder="Enter Password")
     
     if password_input == st.secrets["ADMIN_PASSWORD"]:
         uploaded_files = st.sidebar.file_uploader(
@@ -347,13 +370,14 @@ def main():
             existing_files = [f.name for f in uploaded_files if os.path.exists(os.path.join(DATA_FOLDER, f.name))]
             overwrite = False
             
-            st.sidebar.write(f"**Selected:** {len(uploaded_files)} files")
+            st.sidebar.markdown(f"**Batch Queue:** {len(uploaded_files)} files selected")
 
             if existing_files:
-                st.sidebar.warning(f"⚠️ {len(existing_files)} file(s) already exist.")
-                overwrite = st.sidebar.checkbox("Overwrite existing files?")
+                with st.sidebar.container():
+                    st.warning(f"⚠️ {len(existing_files)} Conflict(s) Detected")
+                    overwrite = st.checkbox("Overwrite existing records?")
 
-            if st.sidebar.button("💾 Save Files to System"):
+            if st.sidebar.button("💾 COMMIT DATA TO SYSTEM", use_container_width=True):
                 # Ensure data folder exists
                 if not os.path.exists(DATA_FOLDER):
                     os.makedirs(DATA_FOLDER)
