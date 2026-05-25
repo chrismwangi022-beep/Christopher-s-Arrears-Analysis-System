@@ -169,6 +169,13 @@ def build_weekly_summary(branch_name: str, df: pd.DataFrame) -> dict:
     
     daily_stats = curr_week.groupby('Report_Date')['Arrears'].sum().sort_index()
 
+    # Validation Debugging Prints
+    print(f"DEBUG: Weekly Activity Data for {branch_name}")
+    print(curr_week.head())
+    print(f"Shape: {curr_week.shape}")
+    if not curr_week.empty:
+        print(f"Range: {curr_week['Report_Date'].min()} to {curr_week['Report_Date'].max()}")
+
     if not daily_stats.empty: # Only proceed with calculations if there's current week data
         low_activity_flag = False # Activity detected
         opening = float(daily_stats.iloc[0])
@@ -351,13 +358,23 @@ def generate_weekly_report(branch_name: str, df: pd.DataFrame) -> str:
     # 1. Load historical snapshots to provide true weekly movement context
     snapshot_file = "historical_branch_snapshots.csv"
     branch_df = pd.DataFrame()
-    if os.path.exists(snapshot_file):
-        hist_df = pd.read_csv(snapshot_file)
-        hist_df = hist_df.rename(columns={'Date': 'Report_Date', 'Total_Arrears': 'Arrears'})
-        branch_df = hist_df[hist_df['Branch'] == branch_name].copy()
     
-    if branch_df.empty:
-        branch_df = df[df['Branch'] == branch_name]
+    if os.path.exists(snapshot_file):
+        try:
+            hist_df = pd.read_csv(snapshot_file)
+            # Ensure the Date column is parsed as datetime objects for valid week filtering
+            hist_df['Date'] = pd.to_datetime(hist_df['Date'], errors='coerce')
+            hist_df = hist_df.rename(columns={'Date': 'Report_Date', 'Total_Arrears': 'Arrears'})
+            branch_df = hist_df[hist_df['Branch'] == branch_name].copy()
+        except Exception as e:
+            print(f"ERROR: Failed to load snapshot file for {branch_name}: {e}")
+    
+    # FALLBACK: Only use the provided dashboard dataframe if the snapshot file is missing or empty.
+    # This prevents sidebar date filters from incorrectly restricting the AI's weekly movement analysis.
+    if branch_df.empty and not df.empty:
+        branch_df = df[df['Branch'] == branch_name].copy()
+        if 'Date' in branch_df.columns and 'Report_Date' not in branch_df.columns:
+            branch_df = branch_df.rename(columns={'Date': 'Report_Date'})
 
     if branch_df.empty:
         return f"SKIP: No records identified for branch '{branch_name}'."
