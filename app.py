@@ -66,10 +66,9 @@ from src.branch_ai import render_branch_intelligence
 
 # Page configuration
 st.set_page_config(
-    page_title="AI Dashboard",
+    page_title="Spread Capital Arrears Analysis System",
     page_icon="assets/sc_favicon_32.png",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    layout="wide"
 )
 
 # Custom CSS for Spread Capital branding
@@ -266,17 +265,9 @@ def main():
         st.error("No data loaded. Please check the data folder path.")
         return
     
-    # Sidebar Branding & Navigation
+    # Sidebar Branding
     st.sidebar.image("assets/sc_logo_sidebar.png", width=80)
-    
-    st.sidebar.markdown("### Navigation")
-    st.sidebar.radio("Go to", ["Dashboard", "Portfolio", "AI Insights", "Reports"])
-    
     st.sidebar.markdown("---")
-
-    # Filter Section
-    st.sidebar.markdown("### Filter Section")
-    branch_selection = st.sidebar.selectbox("Branch", ["All", "Nairobi", "Mombasa", "Kisumu"])
 
     # Timeline -> Calendar: strict single-date filter using Report_Date
     st.sidebar.subheader("Report Date")
@@ -293,9 +284,11 @@ def main():
         df_filtered = df.copy()
     
     # Branch filter with explicit "All" option
-    selected_branches = [branch_selection]
-    if branch_selection != "All":
-        df_filtered = df_filtered[df_filtered['Branch'] == branch_selection]
+    branches = sorted(df_filtered['Branch'].dropna().unique())
+    branch_options = ["All"] + branches
+    selected_branches = st.sidebar.multiselect("Branch", branch_options, default=["All"])
+    if selected_branches and "All" not in selected_branches:
+        df_filtered = df_filtered[df_filtered['Branch'].isin(selected_branches)]
     
     # Loan Officer filter with explicit "All" option
     officers = sorted(df_filtered['Loan_Officer'].dropna().unique())
