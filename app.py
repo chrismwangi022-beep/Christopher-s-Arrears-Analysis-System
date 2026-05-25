@@ -66,8 +66,8 @@ from src.branch_ai import render_branch_intelligence
 
 # Page configuration
 st.set_page_config(
-    page_title="Spread Capital - Arrears Analysis",
-    page_icon="📊",
+    page_title="AI Dashboard",
+    page_icon="assets/sc_favicon_32.png",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -247,7 +247,12 @@ def load_data():
 
 # Main app
 def main():
-    st.title("📊 Spread Capital - Arrears Analysis System")
+    # Header with Logo
+    col_h1, col_h2 = st.columns([1, 8])
+    with col_h1:
+        st.image("assets/sc_logo_header.png", width=40)
+    with col_h2:
+        st.title("AI Portfolio Intelligence Dashboard")
     st.markdown("---")
     
     # Load data
@@ -261,14 +266,17 @@ def main():
         st.error("No data loaded. Please check the data folder path.")
         return
     
-    # Sidebar filters
-    st.sidebar.title("🔍 Filters")
-    # Developer credit next to Filters title
-    st.sidebar.markdown(
-        "<div style='float:right; color:#e6e6e6; font-size:12px; font-style:italic; margin-top:-26px;'>Developer_Christopher © 2026</div>",
-        unsafe_allow_html=True,
-    )
+    # Sidebar Branding & Navigation
+    st.sidebar.image("assets/sc_logo_sidebar.png", width=80)
+    
+    st.sidebar.markdown("### Navigation")
+    st.sidebar.radio("Go to", ["Dashboard", "Portfolio", "AI Insights", "Reports"])
+    
     st.sidebar.markdown("---")
+
+    # Filter Section
+    st.sidebar.markdown("### Filter Section")
+    branch_selection = st.sidebar.selectbox("Branch", ["All", "Nairobi", "Mombasa", "Kisumu"])
 
     # Timeline -> Calendar: strict single-date filter using Report_Date
     st.sidebar.subheader("Report Date")
@@ -285,11 +293,9 @@ def main():
         df_filtered = df.copy()
     
     # Branch filter with explicit "All" option
-    branches = sorted(df_filtered['Branch'].dropna().unique())
-    branch_options = ["All"] + branches
-    selected_branches = st.sidebar.multiselect("Branch", branch_options, default=["All"])
-    if selected_branches and "All" not in selected_branches:
-        df_filtered = df_filtered[df_filtered['Branch'].isin(selected_branches)]
+    selected_branches = [branch_selection]
+    if branch_selection != "All":
+        df_filtered = df_filtered[df_filtered['Branch'] == branch_selection]
     
     # Loan Officer filter with explicit "All" option
     officers = sorted(df_filtered['Loan_Officer'].dropna().unique())

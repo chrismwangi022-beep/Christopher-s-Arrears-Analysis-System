@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="46%" r="54%">
+      <stop offset="0%" stop-color="#29B6F6"/>
+      <stop offset="45%" stop-color="#0288D1"/>
+      <stop offset="100%" stop-color="#01579B"/>
+    </radialGradient>
+    <radialGradient id="ring" cx="50%" cy="50%" r="52%">
+      <stop offset="0%" stop-color="#1976D2"/>
+      <stop offset="100%" stop-color="#0D47A1"/>
+    </radialGradient>
+    <radialGradient id="inner" cx="44%" cy="38%" r="58%">
+      <stop offset="0%" stop-color="#42C8F5"/>
+      <stop offset="55%" stop-color="#0EA5E9"/>
+      <stop offset="100%" stop-color="#0369A1"/>
+    </radialGradient>
+    <linearGradient id="diamond_top" x1="30%" y1="0%" x2="70%" y2="100%">
+      <stop offset="0%" stop-color="#BAE6FD"/>
+      <stop offset="100%" stop-color="#7DD3FC"/>
+    </linearGradient>
+    <filter id="sh">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="rgba(0,0,0,0.35)"/>
+    </filter>
+  </defs>
+
+  <!-- Outer ring circle -->
+  <circle cx="256" cy="256" r="252" fill="url(#ring)"/>
+  <!-- Inner filled circle -->
+  <circle cx="256" cy="252" r="210" fill="url(#inner)"/>
+
+  <!-- SC lettering block - thick bold isometric styled -->
+  <!-- S letter: blocky, flat, top bar + middle bar + bottom bar with side walls -->
+  <!-- Top bar of S -->
+  <rect x="144" y="168" width="108" height="30" rx="4" fill="white" filter="url(#sh)"/>
+  <!-- Middle bar of S -->
+  <rect x="144" y="218" width="108" height="30" rx="4" fill="white" filter="url(#sh)"/>
+  <!-- Bottom bar of S -->
+  <rect x="144" y="268" width="108" height="30" rx="4" fill="white" filter="url(#sh)"/>
+  <!-- Left side top of S -->
+  <rect x="144" y="168" width="28" height="80" rx="4" fill="white"/>
+  <!-- Right side bottom of S -->
+  <rect x="224" y="218" width="28" height="80" rx="4" fill="white"/>
+
+  <!-- C letter -->
+  <!-- Top bar of C -->
+  <rect x="264" y="168" width="108" height="30" rx="4" fill="white" filter="url(#sh)"/>
+  <!-- Bottom bar of C -->
+  <rect x="264" y="268" width="108" height="30" rx="4" fill="white" filter="url(#sh)"/>
+  <!-- Left side of C (vertical) -->
+  <rect x="264" y="168" width="28" height="130" rx="4" fill="white"/>
+
+  <!-- Platform / diamond shape below letters -->
+  <!-- Shadow base -->
+  <ellipse cx="256" cy="362" rx="115" ry="18" fill="#0369A1" opacity="0.6"/>
+  <!-- Diamond: 4 points = top, right, bottom, left -->
+  <!-- Top face (lightest) -->
+  <polygon points="256,318  360,342  256,358  152,342" fill="url(#diamond_top)"/>
+  <!-- Left face (medium) -->
+  <polygon points="152,342  256,358  256,378  152,362" fill="#7DD3FC" opacity="0.88"/>
+  <!-- Right face (darkest) -->
+  <polygon points="360,342  256,358  256,378  360,362" fill="#38BDF8" opacity="0.75"/>
+</svg>
