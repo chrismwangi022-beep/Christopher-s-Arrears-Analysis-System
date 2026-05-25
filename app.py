@@ -16,6 +16,8 @@ from datetime import datetime, timedelta
 import sys
 import os
 import io
+import tempfile
+import stat
 
 try:
     import git
@@ -389,53 +391,72 @@ def main():
                         if not token:
                             git_error_message = "❌ GITHUB_TOKEN not found in Streamlit Secrets."
                         else:
+                            askpass_path = ""
                             try:
                                 # Use the current working directory as the repo path
                                 repo_path = os.path.dirname(os.path.abspath(__file__))
                                 repo = git.Repo(repo_path)
 
-                                # 2. Build the authenticated URL (Safely handle token string for Pylance)
-                                repo_url = "github.com/chrismwangi022-beep/Christopher-s-Arrears-Analysis-System.git"
-                                safe_token = token.strip() if isinstance(token, str) else ""
-                                remote_url = f"https://{safe_token}@{repo_url}"
-
-                                # Configure remote and reconcile divergent branches
-                                # (Caused by the Heartbeat Action creating remote commits)
-                                origin = repo.remote(name='origin')
-                                origin.set_url(remote_url)
+                                # 2. Setup Clean Remote URL & Authentication
+                                # Remove tokens from URL to prevent leakage in process lists or git config
+                                base_url = "github.com/chrismwangi022-beep/Christopher-s-Arrears-Analysis-System.git"
+                                clean_url = f"https://{base_url}"
                                 
+                                origin = repo.remote(name='origin')
+                                origin.set_url(clean_url)
+                                
+                                # Create a temporary ASKPASS script to handle authentication securely.
+                                # This is the production-grade way to pass tokens to Git in headless environments.
+                                with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.sh') as f:
+                                    # Token is used as the password; username is provided via the script as well
+                                    f.write(f"#!/bin/sh\necho '{token}'\n")
+                                    askpass_path = f.name
+                                
+                                # Make the script executable
+                                os.chmod(askpass_path, os.stat(askpass_path).st_mode | stat.S_IEXEC)
+                                
+                                # Prepare environment for git commands
+                                git_env = os.environ.copy()
+                                git_env["GIT_ASKPASS"] = askpass_path
+                                git_env["GIT_TERMINAL_PROMPT"] = "0"
+                                os.environ["GIT_ASKPASS"] = "" # Disable system-level askpass
+
                                 # Set user identity for the automated commit
                                 with repo.config_writer() as cw:
                                     cw.set_value("user", "name", "Spread Capital Admin")
                                     cw.set_value("user", "email", "admin@spreadcapital.com")
 
-                                # Reconcile divergent branches (caused by the Heartbeat Action)
-                                # Using rebase with -Xtheirs ensures remote heartbeat updates 
-                                # don't block local uploads.
-                                try:
-                                    repo.git.pull('origin', 'main', rebase=True, X='theirs')
-                                except git.GitCommandError as e:
-                                    # If a rebase conflict occurs, abort to prevent a stuck state
-                                    if "rebase" in str(e).lower():
-                                        repo.git.rebase("--abort")
-                                    raise e
+                                # Reconcile divergent branches using authenticated environment
+                                repo.git.pull('origin', 'main', rebase=True, X='theirs', env=git_env)
 
                                 # 3. Add and Commit files
-                                repo.index.add(["data/"])  # Adds all files in the data folder
+                                repo.index.add(["data/"])
                                 repo.index.commit("Daily Arrears Update via Web Portal")
 
-                                # Push to ensure the cloud version stays in sync
-                                origin.push(refspec='HEAD:main')
+                                # Push to GitHub using authenticated environment
+                                repo.git.push('origin', 'HEAD:main', env=git_env)
 
                                 git_success_message = "🚀 GitHub Repository Updated Successfully!"
 
                             except git.GitCommandError as e:
-                                if "nothing to commit" in str(e):
+                                # Sanitize output to prevent token exposure
+                                err_msg = str(e).replace(str(token), "********")
+                                if "nothing to commit" in err_msg.lower():
                                     git_success_message = "No new file changes to push to GitHub."
                                 else:
-                                    git_error_message = f"🔥 Git Error: {str(e)}"
+                                    if "rebase" in err_msg.lower():
+                                        try: repo.git.rebase("--abort")
+                                        except: pass
+                                    git_error_message = f"🔥 Git Error: {err_msg}"
                             except Exception as e:
-                                git_error_message = f"🔥 Git Error: {str(e)}"
+                                # Sanitize output to prevent token exposure
+                                err_msg = str(e).replace(str(token), "********")
+                                git_error_message = f"🔥 Git Error: {err_msg}"
+                            finally:
+                                # Clean up the sensitive ASKPASS file
+                                if askpass_path and os.path.exists(askpass_path):
+                                    try: os.unlink(askpass_path)
+                                    except: pass
 
                     # Combine messages and rerun
                     local_save_msg = f"✅ Saved {saved_count} files locally."
