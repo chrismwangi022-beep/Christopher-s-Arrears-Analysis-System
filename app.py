@@ -97,16 +97,16 @@ st.markdown("""
         font-family: 'Calibri', sans-serif !important;
     }
     
-    /* Sidebar Toggle Icon (Expanded - Left Arrow) -> White */
+    /* Sidebar Toggle Icon (Expanded - Left Arrow) -> Red */
     [data-testid="stSidebarCollapseButton"] svg {
-        fill: #FFFFFF !important;
-        color: #FFFFFF !important;
+        fill: #E74C3C !important;
+        color: #E74C3C !important;
     }
     
-    /* Sidebar Toggle Icon (Collapsed - Right Arrow) -> Black */
+    /* Sidebar Toggle Icon (Collapsed - Right Arrow) -> Red */
     [data-testid="stSidebarCollapsedControl"] svg {
-        fill: #000000 !important;
-        color: #000000 !important;
+        fill: #E74C3C !important;
+        color: #E74C3C !important;
     }
     
     /* Fix File Uploader Background & Text in Sidebar */
