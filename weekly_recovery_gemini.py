@@ -146,82 +146,106 @@ def build_weekly_summary(branch_name: str, df: pd.DataFrame) -> dict:
     Computes branch-level metrics and officer performance using pandas only.
     No Gemini calls or narrative writing.
     """
+    # Initialize with defaults for low activity or no current week data
+    opening = 0.0
+    closing = 0.0
+    net_movement = 0.0
+    trend_class = "No significant arrears movement detected this week."
+    mom_class = "No recovery momentum observed due to low activity."
+    max_spike = 0.0
+    spike_date = "N/A"
+    spike_severity = "None"
+    recovery = 0.0
+    reversal = False
+    peak_arrears = 0.0
+    peak_date = "N/A"
+    worst_officers = []
+    best_officers = []
+    key_concern = "No current week activity data available."
+    low_activity_flag = True # Assume low activity until proven otherwise
+
     curr_week = get_current_week(df)
     prev_week = get_previous_week(df)
     
     daily_stats = curr_week.groupby('Report_Date')['Arrears'].sum().sort_index()
-    if daily_stats.empty:
-        return {}
 
-    opening = daily_stats.iloc[0]
-    closing = daily_stats.iloc[-1]
-    net_movement = closing - opening
-    diffs = daily_stats.diff().fillna(0)
-    
-    # Component 1: Trend Detection Engine
-    move_ratio = net_movement / opening if opening > 0 else 0
-    if move_ratio <= -0.05: trend_class = "Improving"
-    elif move_ratio >= 0.10: trend_class = "Critical"
-    elif move_ratio > 0: trend_class = "Worsening"
-    else: trend_class = "Stable"
+    if not daily_stats.empty: # Only proceed with calculations if there's current week data
+        low_activity_flag = False # Activity detected
+        opening = float(daily_stats.iloc[0])
+        closing = float(daily_stats.iloc[-1])
+        net_movement = closing - opening
+        diffs = daily_stats.diff().fillna(0)
+        peak_arrears = float(daily_stats.max())
+        peak_date = daily_stats.idxmax().strftime('%Y-%m-%d')
 
-    # Component 2: Spike Detection Engine
-    max_spike = diffs.max()
-    spike_date = diffs.idxmax().strftime('%Y-%m-%d') if not diffs.empty else "N/A"
-    spike_severity = "Critical" if max_spike > 0.08 * opening else "High" if max_spike > 0.04 * opening else "Normal"
+        # Component 1: Trend Detection Engine
+        move_ratio = net_movement / opening if opening > 0 else 0
+        if move_ratio <= -0.05: trend_class = "Improving"
+        elif move_ratio >= 0.10: trend_class = "Critical"
+        elif move_ratio > 0: trend_class = "Worsening"
+        else: trend_class = "Stable"
 
-    # Component 4: Recovery Momentum Engine
-    rec_days = (diffs < 0).sum()
-    consistency = rec_days / len(diffs) if len(diffs) > 0 else 0
-    if consistency >= 0.6: mom_class = "Strengthening"
-    elif consistency <= 0.2: mom_class = "Critical"
-    elif consistency <= 0.4: mom_class = "Weakening"
-    else: mom_class = "Stable"
-    
-    # Detect reversals (Spike larger than preceding recovery)
-    reversal = any((diffs.iloc[i-1] < 0 and diffs.iloc[i] > abs(diffs.iloc[i-1])) for i in range(1, len(diffs)))
-
-    # Officer Calculation
-    all_dates = daily_stats.index.sort_values()
-    start_dt, end_dt = all_dates[0], all_dates[-1]
-    avg_branch_arr = curr_week.groupby('Loan_Officer')['Arrears'].sum().mean() if not curr_week.empty else 0
-    
-    off_metrics = []
-    for off in curr_week['Loan_Officer'].unique():
-        off_df = curr_week[curr_week['Loan_Officer'] == off]
-        c_arr = off_df[off_df['Report_Date'] == end_dt]['Arrears'].sum()
-        o_arr = off_df[off_df['Report_Date'] == start_dt]['Arrears'].sum()
-        net = c_arr - o_arr
-        dpd = off_df[off_df['Report_Date'] == end_dt]['Average_Days_Past_Due'].mean() if 'Average_Days_Past_Due' in off_df.columns else 0
+        # Component 2: Spike Detection Engine
+        if not diffs.empty:
+            max_spike = float(diffs.max())
+            spike_date = diffs.idxmax().strftime('%Y-%m-%d')
+            spike_severity = "Critical" if max_spike > 0.08 * opening and opening > 0 else "High" if max_spike > 0.04 * opening and opening > 0 else "Normal"
         
-        # Component 3: Officer Risk Engine
-        status = "🟢 Improving" if net < 0 else "🟠 Needs attention"
-        if net > 0 and dpd > 60: status = "🔴 Overloaded high-risk"
-        elif dpd > 90 or c_arr > avg_branch_arr * 1.5: status = "🔴 Critical Watchlist"
+        # Component 4: Recovery Momentum Engine
+        if len(diffs) > 0:
+            rec_days = (diffs < 0).sum()
+            consistency = rec_days / len(diffs)
+            if consistency >= 0.6: mom_class = "Strengthening"
+            elif consistency <= 0.2: mom_class = "Critical"
+            elif consistency <= 0.4: mom_class = "Weakening"
+            else: mom_class = "Stable"
+            
+            # Detect reversals (Spike larger than preceding recovery)
+            reversal = any((diffs.iloc[i-1] < 0 and diffs.iloc[i] > abs(diffs.iloc[i-1])) for i in range(1, len(diffs)))
+            recovery = float(abs(diffs.min())) if diffs.min() < 0 else 0.0
+
+        # Officer Calculation
+        all_dates = daily_stats.index.sort_values()
+        start_dt, end_dt = all_dates[0], all_dates[-1]
+        avg_branch_arr = curr_week.groupby('Loan_Officer')['Arrears'].sum().mean() if not curr_week.empty else 0
         
-        off_metrics.append({
-            "name": off, 
-            "arr": c_arr, 
-            "net": net, 
-            "dpd": dpd, 
-            "status": status, 
-            "rec": abs(net) if net < 0 else 0
-        })
+        off_metrics = []
+        for off in curr_week['Loan_Officer'].unique():
+            off_df = curr_week[curr_week['Loan_Officer'] == off]
+            c_arr = off_df[off_df['Report_Date'] == end_dt]['Arrears'].sum() if end_dt in off_df['Report_Date'].values else 0
+            o_arr = off_df[off_df['Report_Date'] == start_dt]['Arrears'].sum() if start_dt in off_df['Report_Date'].values else 0
+            net = c_arr - o_arr
+            dpd = off_df[off_df['Report_Date'] == end_dt]['Average_Days_Past_Due'].mean() if 'Average_Days_Past_Due' in off_df.columns and end_dt in off_df['Report_Date'].values else 0
+            
+            # Component 3: Officer Risk Engine
+            status = "🟢 Improving" if net < 0 else "🟠 Needs attention"
+            if net > 0 and dpd > 60: status = "🔴 Overloaded high-risk"
+            elif dpd > 90 or (avg_branch_arr > 0 and c_arr > avg_branch_arr * 1.5): status = "🔴 Critical Watchlist"
+            
+            off_metrics.append({
+                "name": off, 
+                "arr": c_arr, 
+                "net": net, 
+                "dpd": dpd, 
+                "status": status, 
+                "rec": abs(net) if net < 0 else 0
+            })
 
-    off_metrics.sort(key=lambda x: x['net'], reverse=True)
-    worst_3 = off_metrics[:3]
-    remaining = [m for m in off_metrics if m not in worst_3]
-    best_2 = sorted(remaining, key=lambda x: x['net'])[:2]
+        off_metrics.sort(key=lambda x: x['net'], reverse=True)
+        worst_3 = off_metrics[:3]
+        remaining = [m for m in off_metrics if m not in worst_3]
+        best_2 = sorted(remaining, key=lambda x: x['net'])[:2]
 
-    # Key Concern Logic
-    key_concern = "Unpaid balances are stable."
-    if not prev_week.empty:
-        prev_avg = prev_week['Arrears'].mean()
-        curr_avg = curr_week['Arrears'].mean()
-        if curr_avg > prev_avg:
-            key_concern = f"Higher unpaid balances than last week (KSh {curr_avg - prev_avg:,.0f} avg increase)."
+        # Key Concern Logic
+        if not prev_week.empty:
+            prev_avg = prev_week['Arrears'].mean()
+            curr_avg = curr_week['Arrears'].mean()
+            if curr_avg > prev_avg:
+                key_concern = f"Higher unpaid balances than last week (KSh {curr_avg - prev_avg:,.0f} avg increase)."
+            else:
+                key_concern = "Weekly performance shows improvement vs previous period."
         else:
-            key_concern = "Weekly performance shows improvement vs previous period."
+            key_concern = "Previous week's data not available for comparison."
 
     return {
         "branch": branch_name.upper(),
@@ -237,7 +261,8 @@ def build_weekly_summary(branch_name: str, df: pd.DataFrame) -> dict:
         "recovery": abs(diffs.min()) if diffs.min() < 0 else 0,
         "worst_officers": worst_3,
         "best_officers": best_2,
-        "key_concern": key_concern
+        "key_concern": key_concern,
+        "low_activity_flag": low_activity_flag # Indicate if current week had no activity
     }
 
 def generate_weekly_narrative(summary: dict) -> str:
@@ -246,9 +271,8 @@ def generate_weekly_narrative(summary: dict) -> str:
     Uses Gemini AI to generate a professional WhatsApp-ready report from computed summary.
     No calculations performed here.
     """
-    if not summary:
-        return "OFFLINE: Insufficient activity data to generate report."
-
+    # The summary will always be a dictionary now, even if activity is low.
+    # The check for `if not summary:` is no longer needed here.
     api_key = st.secrets.get("GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
     if not api_key:
         return "SYSTEM ERROR: Gemini API Key not configured."
@@ -257,9 +281,14 @@ def generate_weekly_narrative(summary: dict) -> str:
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel("gemini-2.5-flash")
 
+        # Add low activity note if applicable
+        low_activity_note = ""
+        if summary.get("low_activity_flag", False):
+            low_activity_note = "Recovery activity was relatively low this week, limiting major movement observations.\n\n"
+
         # Compact officer text for prompt
-        worst_txt = "\n".join([f"- {m['name']}: KSh {m['arr']:,.0f} Arrears | {m['rec']:,.0f} Recovery | {m['dpd']:.1f} DPD | {m['status']}" for m in summary['worst_officers']])
-        best_txt = "\n".join([f"- {m['name']}: KSh {m['arr']:,.0f} Arrears | {m['rec']:,.0f} Recovery | {m['dpd']:.1f} DPD | {m['status']}" for m in summary['best_officers']])
+        worst_txt = "\n".join([f"- {m['name']}: KSh {m['arr']:,.0f} Arrears | {m['rec']:,.0f} Recovery | {m['dpd']:.1f} DPD | {m['status']}" for m in summary['worst_officers']]) if summary['worst_officers'] else "No officers flagged for immediate attention."
+        best_txt = "\n".join([f"- {m['name']}: KSh {m['arr']:,.0f} Arrears | {m['rec']:,.0f} Recovery | {m['dpd']:.1f} DPD | {m['status']}" for m in summary['best_officers']]) if summary['best_officers'] else "No top performing officers identified this week."
 
         prompt = f"""
 ACT AS: A Professional Portfolio Manager for Spread Capital.
@@ -267,7 +296,7 @@ TONE: Professional, respectful, firm, and simple English. Avoid technical bankin
 
 DATA SUMMARY:
 Branch: {summary['branch']}
-Arrears: Opening KSh {summary['opening']:,.0f} -> Closing KSh {summary['closing']:,.0f} (Net: KSh {summary['movement']:,.0f})
+Arrears: Opening KSh {summary['opening']:,.0f} -> Closing KSh {summary['closing']:,.0f} (Net: KSh {summary['movement']:,.0f})\n{low_activity_note}
 Trend: {summary['trend_class']} | Momentum: {summary['mom_class']}
 Peak: KSh {summary['peak_arrears']:,.0f} on {summary['peak_date']}
 Spike: KSh {summary['spike_info']['amount']:,.0f} on {summary['spike_info']['date']} (Severity: {summary['spike_info']['severity']})
