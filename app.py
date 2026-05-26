@@ -1166,9 +1166,6 @@ def main():
                 height=600,
                 key="recovery_report_text"
             )
-            
-            if st.button("📋 Copy Weekly Report", use_container_width=True):
-                st.toast("Report ready for copying from text area!")
 
 if __name__ == "__main__":
     main()
