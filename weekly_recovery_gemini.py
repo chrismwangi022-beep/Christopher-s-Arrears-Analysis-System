@@ -159,6 +159,8 @@ def build_weekly_summary(branch_name: str, df: pd.DataFrame) -> dict:
     reversal = False
     peak_arrears = 0.0
     peak_date = "N/A"
+    total_principal = 0.0
+    par_percent = 0.0
     worst_officers = []
     best_officers = []
     key_concern = "No current week activity data available."
@@ -184,6 +186,12 @@ def build_weekly_summary(branch_name: str, df: pd.DataFrame) -> dict:
         diffs = daily_stats.diff().fillna(0)
         peak_arrears = float(daily_stats.max())
         peak_date = daily_stats.idxmax().strftime('%Y-%m-%d')
+
+        # Principle Identification for PAR calculation
+        p_col = 'Total_Principal' if 'Total_Principal' in curr_week.columns else ('Principle' if 'Principle' in curr_week.columns else ('Principal' if 'Principal' in curr_week.columns else None))
+        if p_col:
+            total_principal = float(curr_week.groupby('Report_Date')[p_col].sum().iloc[-1])
+            par_percent = (closing / total_principal * 100) if total_principal > 0 else 0.0
 
         # Component 1: Trend Detection Engine
         move_ratio = net_movement / opening if opening > 0 else 0
@@ -261,6 +269,8 @@ def build_weekly_summary(branch_name: str, df: pd.DataFrame) -> dict:
         "movement": net_movement,
         "trend_class": trend_class,
         "mom_class": mom_class,
+        "total_principal": total_principal,
+        "par_percent": par_percent,
         "reversal": reversal,
         "peak_arrears": peak_arrears,
         "peak_date": peak_date,
@@ -288,55 +298,97 @@ def generate_weekly_narrative(summary: dict) -> str:
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel("gemini-2.5-flash")
 
-        # Add low activity note if applicable
-        low_activity_note = ""
-        if summary.get("low_activity_flag", False):
-            low_activity_note = "Recovery activity was relatively low this week, limiting major movement observations.\n\n"
-
-        # Compact officer text for prompt
-        worst_txt = "\n".join([f"- {m['name']}: KSh {m['arr']:,.0f} Arrears | {m['rec']:,.0f} Recovery | {m['dpd']:.1f} DPD | {m['status']}" for m in summary['worst_officers']]) if summary['worst_officers'] else "No officers flagged for immediate attention."
-        best_txt = "\n".join([f"- {m['name']}: KSh {m['arr']:,.0f} Arrears | {m['rec']:,.0f} Recovery | {m['dpd']:.1f} DPD | {m['status']}" for m in summary['best_officers']]) if summary['best_officers'] else "No top performing officers identified this week."
+        # Prepare officer metrics for analysis
+        all_officers = summary['worst_officers'] + summary['best_officers']
+        officer_data_prompt = ""
+        for m in all_officers:
+            officer_data_prompt += f"Officer: {m['name']} | Arrears: KSh {m['arr']:,.0f} | Recovery: KSh {m['rec']:,.0f} | DPD: {m['dpd']:.1f} | Status: {m['status']}\n"
 
         prompt = f"""
-ACT AS: A Professional Portfolio Manager for Spread Capital.
-TONE: Professional, respectful, firm, and simple English. Avoid technical banking jargon.
+You are a Credit Risk Reporting Engine for a regulated microfinance institution.
 
-DATA SUMMARY:
+STRICT OUTPUT RULE:
+You MUST follow the structure exactly.
+Do NOT add extra text.
+Do NOT omit fields.
+Do NOT cut off officer comments.
+Do NOT generate narrative outside defined sections.
+If data is missing, write "N/A".
+
+DATA FOR ANALYSIS:
 Branch: {summary['branch']}
-Arrears: Opening KSh {summary['opening']:,.0f} -> Closing KSh {summary['closing']:,.0f} (Net: KSh {summary['movement']:,.0f})\n{low_activity_note}
-Trend: {summary['trend_class']} | Momentum: {summary['mom_class']}
-Peak: KSh {summary['peak_arrears']:,.0f} on {summary['peak_date']}
-Spike: KSh {summary['spike_info']['amount']:,.0f} on {summary['spike_info']['date']} (Severity: {summary['spike_info']['severity']})
-Max Recovery: KSh {summary['recovery']:,.0f}
-Reversals detected: {'Yes' if summary['reversal'] else 'No'}
+Closing Arrears: KSh {summary['closing']:,.0f}
+Net Movement: KSh {summary['movement']:,.0f}
+Trend: {summary['trend_class']}
+Momentum: {summary['mom_class']}
+Peak Arrears: KSh {summary['peak_arrears']:,.0f} on {summary['peak_date']}
+Latest Spike: KSh {summary['spike_info']['amount']:,.0f} on {summary['spike_info']['date']}
 Key Concern: {summary['key_concern']}
+PAR Status: {summary.get('par_percent', 0):.2f}%
+Recovery Status: {'Reversal detected' if summary['reversal'] else 'No significant post-collection slippage'}
 
-OFFICERS NEEDING ATTENTION:
-{worst_txt}
+OFFICER LIST:
+{officer_data_prompt}
 
-TOP OFFICERS:
-{best_txt}
+========================
+📋 OUTPUT TEMPLATE (MUST FOLLOW EXACTLY)
+========================
 
-TASK:
-Generate a structured Branch Recovery Radar intelligence report for WhatsApp.
-Use sections: 🚩 Branch Report, 🔥 Recovery Momentum, ⚠️ Risk Level, 💀 Damage, 📉 Improvement Needed, 👤 Officer Summary, 🥊 Action Plan, 📡 BRANCH RECOVERY RADAR, ⚡ Final Message.
+📋 BRANCH REPORT
+Branch: {summary['branch']}
+Current Unpaid Balances: KSh {summary['closing']:,.0f}
+Change: KSh {summary['movement']:,.0f}
+Overall Trend: {summary['trend_class']}
 
-In the 📡 BRANCH RECOVERY RADAR section, include:
-- High Priority Alerts (based on trend and spike severity)
-- Officer Watchlist (identify overloaded or high-risk portfolios)
-- Operational Concerns (weakening recovery patterns or midweek reversals)
-- Positive Signals (highlight improving trends or high-performing officers)
+🔥 RECOVERY MOMENTUM
+Momentum: {summary['mom_class']}
+Recovery Status: {'Improving' if summary['movement'] < 0 else 'Deteriorating'}
 
-RULES:
-1. Simple English only. Use "High unpaid balances" instead of "concentration" and "Risky growth" instead of "deterioration".
-2. Officer section MUST use this format:
-   [Name]
-   Arrears: KSh [Amt] | Recovery: KSh [Amt] | DPD: [Val]
-   Status: [Status]
-   Comment: [One short sentence]
-3. Ensure the report is fully completed. Do not stop mid-officer.
-4. Formatting: *bold* for critical info, emoji headers, extremely short paragraphs.
-5. Output ONLY the report text.
+⚠️ RISK LEVEL
+Risk: {summary.get('par_percent', 0):.2f}% PAR
+Risk Explanation: {summary['key_concern']}
+
+💀 DAMAGE SUMMARY
+Peak Balance: KSh {summary['peak_arrears']:,.0f} on {summary['peak_date']}
+Latest Increase: KSh {summary['spike_info']['amount']:,.0f} on {summary['spike_info']['date']}
+
+📉 PERFORMANCE NOTE
+{summary['key_concern']}
+
+👤 OFFICER SUMMARY
+For EACH officer, output EXACTLY in this format:
+
+Name: [Name]
+Arrears: KSh [Arrears]
+Recovery: KSh [Recovery]
+DPD: [DPD]
+Status: [Status]
+Comment: [Generate a professional comment based on their metrics. Do not truncate.]
+
+📡 BRANCH RECOVERY RADAR
+
+High Priority Alerts:
+- [Alert based on spikes or critical trends]
+
+Officer Watchlist:
+- [Officer names needing attention]
+
+Operational Concerns:
+- [Concerns about reversals or low recovery]
+
+Positive Signals:
+- [Signals from top performing officers]
+
+========================
+⚡ FINAL RULES
+========================
+- No emojis outside section headers
+- No storytelling language
+- No paragraphs
+- No missing fields
+- No duplicated sections
+- No partial officer entries allowed
+- Output must be complete and consistent
 """
         config = {
             "temperature": 0.4,
@@ -376,7 +428,7 @@ def parse_radar_intelligence(report_text: str) -> dict:
         mapping = {
             "High Priority Alerts": "alerts",
             "Officer Watchlist": "watchlist",
-            "Operational Risks": "concerns",
+            "Operational Concerns": "concerns",
             "Positive Signals": "signals"
         }
         
