@@ -1130,8 +1130,6 @@ def main():
                     if radar_obj.get("signals"):
                         st.markdown("**✅ Positive Signals**")
                         for item in radar_obj["signals"]: st.success(item)
-        else:
-            st.info("Radar Offline: Operational intelligence is generated as part of the Weekly Recovery Report. Please generate the report below to activate the radar.")
 
     # --- 🚨 Weekly Recovery Intelligence Report Section ---
     if len(selected_branches) == 1 and "All" not in selected_branches:

@@ -376,7 +376,7 @@ def parse_radar_intelligence(report_text: str) -> dict:
         mapping = {
             "High Priority Alerts": "alerts",
             "Officer Watchlist": "watchlist",
-            "Operational Concerns": "concerns",
+            "Operational Risks": "concerns",
             "Positive Signals": "signals"
         }
         
