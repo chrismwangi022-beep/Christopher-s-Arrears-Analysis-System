@@ -205,60 +205,79 @@ st.markdown("""
         line-height: 1 !important;
     }
 
-    /* KPI Cards - Compact */
+    /* KPI Cards - Resilient SaaS Layout */
     .kpi-card {
         background: linear-gradient(135deg, #1E2A5E 0%, #2A3A6E 100%);
-        padding: 0.5rem 1rem; /* py-2 px-4 */
-        border-radius: 8px; /* Slightly smaller radius */
+        padding: 0.5rem 0.75rem !important; /* py-2 px-3 */
+        border-radius: 0.75rem !important; /* rounded-xl */
         color: white;
         text-align: center;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1); /* Smaller shadow */
-        height: 70px; /* Reduced height */
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        height: 96px !important; /* h-24 */
         display: flex;
         flex-direction: column;
+        align-items: center;
         justify-content: center;
+        overflow: hidden; /* Prevent text leak */
+        width: 100% !important;
+        min-width: 0 !important; /* Critical for flex shrinking */
     }
-    .kpi-value {
-        font-size: 1.2em; /* text-lg */
-        font-weight: bold;
+
+    .kpi-value-container {
+        display: flex;
+        flex-wrap: wrap; /* Graceful wrapping for large numbers */
+        align-items: baseline;
+        justify-content: center;
+        gap: 2px;
+        width: 100%;
+        min-width: 0;
+    }
+
+    .kpi-currency {
+        font-size: 0.85rem !important; /* text-sm */
+        font-weight: 600 !important;
         color: #00D1FF;
-        line-height: 1.2;
+        opacity: 0.85;
     }
-    .kpi-label {
-        font-size: 0.75em; /* text-xs */
-        margin-top: 2px;
-        opacity: 0.9;
-        line-height: 1.2;
-    }
-    /* Adjust column gap for KPI cards */
-    .kpi-row > div {
-        gap: 0.75rem !important; /* gap-3 */
-    }
-    .kpi-row {
-        margin-top: 0.5rem !important; /* mt-2 */
-    }
-    
-    /* KPI Cards */
-    .kpi-card {
-        background: linear-gradient(135deg, #1E2A5E 0%, #2A3A6E 100%);
-        padding: 20px;
-        border-radius: 10px;
-        color: white;
+
+    .kpi-value {
+        font-weight: 700 !important;
+        line-height: 1 !important; /* leading-tight */
+        word-break: break-all !important; /* prevent horizontal overflow of digits */
+        white-space: normal !important;
+        overflow: hidden;
         text-align: center;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    }
-    
-    .kpi-value {
-        font-size: 2em;
-        font-weight: bold;
+        min-width: 0;
         color: #00D1FF;
+        font-size: 1.125rem !important; /* text-lg */
     }
-    
+
+    @media (min-width: 640px) { .kpi-value { font-size: 1.25rem !important; } } /* sm:text-xl */
+    @media (min-width: 1280px) { .kpi-value { font-size: 1.5rem !important; } } /* xl:text-2xl */
+
     .kpi-label {
-        font-size: 0.9em;
-        margin-top: 5px;
+        margin-top: 4px !important; /* mt-1 */
+        font-size: 11px !important;
+        line-height: 1.1 !important;
+        white-space: normal !important;
+        word-break: break-word !important;
+        text-align: center;
         opacity: 0.9;
+        width: 100%;
+        min-width: 0;
     }
+
+    @media (min-width: 640px) { .kpi-label { font-size: 0.75rem !important; } } /* sm:text-xs */
+
+    /* Stabilize Responsive Grid Row */
+    [data-testid="stHorizontalBlock"]:has(.kpi-card) {
+        display: grid !important;
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        gap: 0.75rem !important;
+    }
+    @media (min-width: 768px) { [data-testid="stHorizontalBlock"]:has(.kpi-card) { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; } }
+    @media (min-width: 1280px) { [data-testid="stHorizontalBlock"]:has(.kpi-card) { grid-template-columns: repeat(5, minmax(0, 1fr)) !important; } }
+    [data-testid="stHorizontalBlock"]:has(.kpi-card) > div { width: 100% !important; max-width: 100% !important; flex: none !important; }
     
     /* Priority cards */
     .priority-critical {
@@ -624,43 +643,55 @@ def main():
     with col1:
         st.markdown(f"""
         <div class="kpi-card">
-            <div class="kpi-value">{CURRENCY_SYMBOL} {total_arrears:,.0f}</div>
+            <div class="kpi-value-container">
+                <span class="kpi-currency">{CURRENCY_SYMBOL}</span>
+                <span class="kpi-value">{total_arrears:,.0f}</span>
+            </div>
             <div class="kpi-label">Total Arrears</div>
         </div>
         """, unsafe_allow_html=True)
-    
+
     # 2. Defaulters (Accounts in Arrears)
     with col2:
         st.markdown(f"""
         <div class="kpi-card">
-            <div class="kpi-value">{accounts_in_arrears:,}</div>
+            <div class="kpi-value-container">
+                <span class="kpi-value">{accounts_in_arrears:,}</span>
+            </div>
             <div class="kpi-label">Defaulters (Accounts in Arrears)</div>
         </div>
         """, unsafe_allow_html=True)
-    
+
     # 3. Average Days Past Due
     with col3:
         st.markdown(f"""
         <div class="kpi-card">
-            <div class="kpi-value">{avg_days:.1f}</div>
+            <div class="kpi-value-container">
+                <span class="kpi-value">{avg_days:.1f}</span>
+            </div>
             <div class="kpi-label">Average Days Past Due</div>
         </div>
         """, unsafe_allow_html=True)
-    
+
     # 4. PAR %
     with col4:
         st.markdown(f"""
         <div class="kpi-card">
-            <div class="kpi-value">{par_percentage:.2f}%</div>
+            <div class="kpi-value-container">
+                <span class="kpi-value">{par_percentage:.2f}%</span>
+            </div>
             <div class="kpi-label">PAR %</div>
         </div>
         """, unsafe_allow_html=True)
-    
+
     # 5. Total Principal
     with col5:
         st.markdown(f"""
         <div class="kpi-card">
-            <div class="kpi-value">{CURRENCY_SYMBOL} {total_portfolio:,.0f}</div>
+            <div class="kpi-value-container">
+                <span class="kpi-currency">{CURRENCY_SYMBOL}</span>
+                <span class="kpi-value">{total_portfolio:,.0f}</span>
+            </div>
             <div class="kpi-label">Total Principal</div>
         </div>
         """, unsafe_allow_html=True)
