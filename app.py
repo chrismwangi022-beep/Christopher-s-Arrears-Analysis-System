@@ -1096,7 +1096,6 @@ def main():
             st.session_state["weekly_reports_cache"] = {}
             
         st.markdown("---")
-        st.subheader("📡 Branch Recovery Radar")
         
         # Match the cache key logic used in the Weekly Report generator
         now = pd.Timestamp.now().normalize()
