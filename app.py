@@ -74,6 +74,27 @@ st.set_page_config(
 # Custom CSS for Spread Capital branding
 st.markdown("""
 <style>
+    /* Global Density Improvements */
+    /* Target Streamlit's main content block for general spacing */
+    .st-emotion-cache-z5fcl4 { /* This class might change, but targets the main content area's vertical stack */
+        gap: 0.5rem !important; /* Reduce default vertical gap */
+    }
+    .st-emotion-cache-1r6y4z { /* Another common Streamlit vertical block class */
+        gap: 0.5rem !important;
+    }
+    .st-emotion-cache-10q9071 { /* Yet another common Streamlit vertical block class */
+        gap: 0.5rem !important;
+    }
+    /* Reduce margin for subheaders */
+    h2 {
+        margin-top: 0.75rem !important; /* mt-3 */
+        margin-bottom: 0.5rem !important; /* mb-2 */
+    }
+    /* Reduce margin for horizontal rules */
+    hr {
+        margin-top: 0.5rem !important; /* mt-2 */
+        margin-bottom: 0.5rem !important; /* mb-2 */
+    }
     /* Sidebar styling */
     [data-testid="stSidebar"] {
         background-color: #1E2A5E;
@@ -81,7 +102,7 @@ st.markdown("""
     }
     
     /* Global Sidebar Spacing Fix */
-    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
+    [data-testid="stSidebar"] .st-emotion-cache-1r6y4z { /* Target stVerticalBlock for general spacing */
         gap: 1.2rem !important;
     }
 
@@ -93,6 +114,10 @@ st.markdown("""
     }
     [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3, 
     [data-testid="stSidebar"] label, [data-testid="stSidebar"] p, [data-testid="stSidebar"] strong {
+        color: #FFFFFF !important;
+        font-family: 'Calibri', sans-serif !important;
+    }
+    [data-testid="stSidebar"] .st-emotion-cache-10q9071 label { /* Target labels within stVerticalBlock */
         color: #FFFFFF !important;
         font-family: 'Calibri', sans-serif !important;
     }
@@ -157,23 +182,60 @@ st.markdown("""
         border: 1px solid #FFFFFF !important;
     }
     
-    /* Premium Operational Status Cards (Alerts) */
-    [data-testid="stSidebar"] [data-testid="stAlert"] {
-        background-color: rgba(42, 58, 110, 0.8) !important;
-        color: #FFFFFF !important;
-        border: none !important;
-        border-left: 5px solid #00D1FF !important;
-        border-radius: 4px !important;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.2) !important;
+    /* Header Styling - Compact SaaS Top Bar */
+    .compact-header {
+        display: flex;
+        align-items: center;
+        height: 48px; /* Fixed height */
+        padding: 0 1rem; /* px-4 */
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1); /* Subtle border */
+        background-color: #1E2A5E; /* Match sidebar background */
+        color: #FFFFFF;
+        margin-bottom: 0.5rem; /* mt-2 equivalent */
     }
-    [data-testid="stSidebar"] [data-status="success"] {
-        border-left-color: #2ECC71 !important;
+    .compact-header img {
+        height: 28px; /* Small SC logo icon */
+        margin-right: 0.5rem;
     }
-    [data-testid="stSidebar"] [data-status="warning"] {
-        border-left-color: #F1C40F !important;
+    .compact-header h1 {
+        font-size: 1.1rem !important; /* text-base */
+        font-weight: 600 !important; /* font-semibold */
+        margin: 0 !important;
+        padding: 0 !important;
+        line-height: 1 !important;
     }
-    [data-testid="stSidebar"] [data-status="error"] {
-        border-left-color: #E74C3C !important;
+
+    /* KPI Cards - Compact */
+    .kpi-card {
+        background: linear-gradient(135deg, #1E2A5E 0%, #2A3A6E 100%);
+        padding: 0.5rem 1rem; /* py-2 px-4 */
+        border-radius: 8px; /* Slightly smaller radius */
+        color: white;
+        text-align: center;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1); /* Smaller shadow */
+        height: 70px; /* Reduced height */
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+    .kpi-value {
+        font-size: 1.2em; /* text-lg */
+        font-weight: bold;
+        color: #00D1FF;
+        line-height: 1.2;
+    }
+    .kpi-label {
+        font-size: 0.75em; /* text-xs */
+        margin-top: 2px;
+        opacity: 0.9;
+        line-height: 1.2;
+    }
+    /* Adjust column gap for KPI cards */
+    .kpi-row > div {
+        gap: 0.75rem !important; /* gap-3 */
+    }
+    .kpi-row {
+        margin-top: 0.5rem !important; /* mt-2 */
     }
     
     /* KPI Cards */
@@ -206,6 +268,17 @@ st.markdown("""
         border-radius: 5px;
         margin: 10px 0;
     }
+
+    /* AI Portfolio Insights - Inline Action Bar */
+    .ai-action-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        height: 40px; /* h-10 */
+        padding: 0 0.75rem; /* px-3 */
+        border-radius: 8px;
+        border: 1px solid rgba(0, 209, 255, 0.3); /* Border matching accent color */
+        background-color:
     
     .priority-warning {
         border-left: 5px solid #FF8C00;
