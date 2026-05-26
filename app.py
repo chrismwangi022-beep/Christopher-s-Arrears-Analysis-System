@@ -61,7 +61,7 @@ from src.constants import (
     CHART_CONFIG,
     DATA_FOLDER,
 )
-from weekly_recovery_gemini import generate_weekly_report, update_historical_snapshots
+from weekly_recovery_gemini import generate_weekly_report, update_historical_snapshots, parse_radar_intelligence
 from src.branch_ai import render_branch_intelligence
 
 # Page configuration
@@ -1103,19 +1103,33 @@ def main():
         monday_date = (now - pd.Timedelta(days=now.weekday())).strftime('%Y-%m-%d')
         cache_key = f"{branch_name}_{monday_date}"
         
-        report_content = st.session_state["weekly_reports_cache"].get(cache_key)
+        report_data = st.session_state["weekly_reports_cache"].get(cache_key)
+        
+        # Structured Radar Parsing Logic for UI Rendering
+        radar_obj = {}
+        if isinstance(report_data, dict):
+            radar_obj = report_data.get("radar", {})
+        elif isinstance(report_data, str):
+            radar_obj = parse_radar_intelligence(report_data)
 
-        if report_content and "📡 BRANCH RECOVERY RADAR" in report_content:
-            # Extract the specific Radar intelligence section
-            radar_payload = report_content.split("📡 BRANCH RECOVERY RADAR")[-1]
-            
-            # Ensure clean rendering by stopping before the final message
-            for terminator in ["⚡ FINAL MESSAGE", "⚡ Final Message"]:
-                if terminator in radar_payload:
-                    radar_payload = radar_payload.split(terminator)[0]
-            
+        if radar_obj and any(radar_obj.values()):
             with st.container(border=True):
-                st.markdown(radar_payload.strip())
+                st.markdown("### 📡 Branch Intelligence Feed")
+                r_col1, r_col2 = st.columns(2)
+                with r_col1:
+                    if radar_obj.get("alerts"):
+                        st.markdown("**🚨 Priority Alerts**")
+                        for item in radar_obj["alerts"]: st.info(item)
+                    if radar_obj.get("watchlist"):
+                        st.markdown("**👁️ Officer Watchlist**")
+                        for item in radar_obj["watchlist"]: st.warning(item)
+                with r_col2:
+                    if radar_obj.get("concerns"):
+                        st.markdown("**⚠️ Operational Concerns**")
+                        for item in radar_obj["concerns"]: st.error(item)
+                    if radar_obj.get("signals"):
+                        st.markdown("**✅ Positive Signals**")
+                        for item in radar_obj["signals"]: st.success(item)
         else:
             st.info("Radar Offline: Operational intelligence is generated as part of the Weekly Recovery Report. Please generate the report below to activate the radar.")
 
@@ -1134,23 +1148,24 @@ def main():
             if st.button("🚀 Generate Weekly Report (Gemini AI)", use_container_width=True):
                 if cache_key not in st.session_state["weekly_reports_cache"]:
                     with st.spinner(f"📡 Accessing Recovery Command for {branch_name}..."):
-                        st.session_state["weekly_reports_cache"][cache_key] = generate_weekly_report(branch_name, df_display)
+                        st.session_state["weekly_reports_cache"][cache_key] = generate_weekly_report(branch_name, df_display, return_structured=True)
                 else:
                     st.toast("Report retrieved from local cache.")
         
-        report_content = st.session_state["weekly_reports_cache"].get(cache_key)
+        report_data = st.session_state["weekly_reports_cache"].get(cache_key)
+        report_text = report_data.get("report_text", "") if isinstance(report_data, dict) else (report_data or "")
 
         with col_ai2:
-            if report_content:
+            if report_text:
                 if st.button("♻️ Regenerate Report", use_container_width=True):
                     with st.spinner("Refreshing intelligence..."):
-                        st.session_state["weekly_reports_cache"][cache_key] = generate_weekly_report(branch_name, df_display)
+                        st.session_state["weekly_reports_cache"][cache_key] = generate_weekly_report(branch_name, df_display, return_structured=True)
                         st.rerun()
 
-        if report_content:
+        if report_text:
             st.text_area(
                 label="Field Communication (WhatsApp Copy)",
-                value=report_content,
+                value=report_text,
                 height=600,
                 key="recovery_report_text"
             )

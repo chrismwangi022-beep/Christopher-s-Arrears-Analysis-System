@@ -349,7 +349,58 @@ RULES:
     except Exception as e:
         return f"Gemini Narrative Error: {str(e)}"
 
-def generate_weekly_report(branch_name: str, df: pd.DataFrame) -> str:
+def parse_radar_intelligence(report_text: str) -> dict:
+    """
+    Parses the raw text report to extract the Radar section into a structured dictionary.
+    Useful for UI rendering of specific alerts and signals.
+    """
+    radar_data = {
+        "alerts": [],
+        "watchlist": [],
+        "concerns": [],
+        "signals": []
+    }
+    
+    if not report_text or "📡 BRANCH RECOVERY RADAR" not in report_text:
+        return radar_data
+        
+    try:
+        radar_section = report_text.split("📡 BRANCH RECOVERY RADAR")[-1]
+        for terminator in ["⚡ FINAL MESSAGE", "⚡ Final Message"]:
+            if terminator in radar_section:
+                radar_section = radar_section.split(terminator)[0]
+        
+        lines = radar_section.strip().split('\n')
+        current_key = None
+        
+        mapping = {
+            "High Priority Alerts": "alerts",
+            "Officer Watchlist": "watchlist",
+            "Operational Concerns": "concerns",
+            "Positive Signals": "signals"
+        }
+        
+        for line in lines:
+            clean_line = line.strip().replace('*', '').replace('_', '')
+            if not clean_line: continue
+            
+            header_found = False
+            for header, key in mapping.items():
+                if header in clean_line:
+                    current_key = key
+                    header_found = True
+                    break
+            
+            if not header_found and current_key and (line.strip().startswith('-') or line.strip().startswith('*')):
+                content = line.strip().lstrip('-*').strip()
+                if content:
+                    radar_data[current_key].append(content)
+    except Exception:
+        pass
+            
+    return radar_data
+
+def generate_weekly_report(branch_name: str, df: pd.DataFrame, return_structured: bool = False) -> str | dict:
     """
     Orchestrates the two-stage AI reporting system.
     1. STAGE 1 — SUMMARY ENGINE (Pandas)
@@ -383,4 +434,13 @@ def generate_weekly_report(branch_name: str, df: pd.DataFrame) -> str:
     summary = build_weekly_summary(branch_name, branch_df)
     
     # Stage 2: Narrative Engine
-    return generate_weekly_narrative(summary)
+    report_text = generate_weekly_narrative(summary)
+    
+    if return_structured:
+        return {
+            "report_text": report_text,
+            "radar": parse_radar_intelligence(report_text),
+            "metadata": summary
+        }
+        
+    return report_text
