@@ -322,6 +322,29 @@ st.markdown("""
         border-radius: 5px;
         margin: 10px 0;
     }
+
+    /* Developer Credit Styling - Premium Tech Look */
+    .developer-credit {
+        font-family: 'Calibri', 'Segoe UI', sans-serif;
+        font-style: italic;
+        color: #718096;
+        font-size: 0.85rem;
+        letter-spacing: 0.05em;
+        text-align: right;
+        margin-top: 1.4rem;
+    }
+    .developer-credit strong {
+        font-weight: 700;
+        color: #2D3748;
+    }
+    .footer-caption {
+        text-align: center;
+        color: #A0AEC0;
+        font-size: 0.75rem;
+        font-style: italic;
+        margin-top: 2rem;
+        padding-bottom: 2rem;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -340,10 +363,13 @@ def load_data():
 def main():
     # Main Page Header Branding
     col_h1, col_h2 = st.columns([1, 8])
+    col_h1, col_h2, col_h3 = st.columns([1, 6, 3])
     with col_h1:
         st.image("assets/sc_logo_header.png", width=100)
     with col_h2:
         st.title("Spread Capital Arrears Analysis System")
+    with col_h3:
+        st.markdown('<div class="developer-credit">Developer_<strong>Christopher</strong></div>', unsafe_allow_html=True)
     st.markdown("---")
 
     # Load data
@@ -1166,6 +1192,13 @@ def main():
                 height=600,
                 key="recovery_report_text"
             )
+
+    # Footer Section - Branding Divider & Caption
+    st.markdown("---")
+    st.markdown(
+        '<div class="footer-caption">Internal System • Developed by Developer_<strong>Christopher</strong></div>',
+        unsafe_allow_html=True
+    )
 
 if __name__ == "__main__":
     main()
