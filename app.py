@@ -323,19 +323,20 @@ st.markdown("""
         margin: 10px 0;
     }
 
-    /* Developer Credit Styling - Premium Tech Look */
-    .developer-credit {
+    /* Sidebar Branding Styling - Subtle & Professional */
+    .sidebar-branding {
         font-family: 'Calibri', 'Segoe UI', sans-serif;
         font-style: italic;
-        color: #718096;
-        font-size: 0.85rem;
-        letter-spacing: 0.05em;
-        text-align: right;
-        margin-top: 1.4rem;
+        font-size: 0.72rem;
+        color: rgba(255, 255, 255, 0.45);
+        letter-spacing: 0.04em;
+        margin-bottom: 0.8rem;
+        padding-left: 2px;
     }
-    .developer-credit strong {
-        font-weight: 700;
-        color: #2D3748;
+    .sidebar-branding .name-choco {
+        font-family: "Choco Cooky", "Comic Sans MS", cursive;
+        font-weight: bold;
+        color: #00D1FF;
     }
     .footer-caption {
         text-align: center;
@@ -361,15 +362,15 @@ def load_data():
 
 # Main app
 def main():
+    # Sidebar Branding (Very Top)
+    st.sidebar.markdown('<div class="sidebar-branding">Developer_<span class="name-choco">Christopher</span></div>', unsafe_allow_html=True)
+
     # Main Page Header Branding
-    col_h1, col_h2 = st.columns([1, 8])
-    col_h1, col_h2, col_h3 = st.columns([1, 6, 3])
+    col_h1, col_h2 = st.columns([1, 9])
     with col_h1:
         st.image("assets/sc_logo_header.png", width=100)
     with col_h2:
         st.title("Spread Capital Arrears Analysis System")
-    with col_h3:
-        st.markdown('<div class="developer-credit">Developer_<strong>Christopher</strong></div>', unsafe_allow_html=True)
     st.markdown("---")
 
     # Load data
