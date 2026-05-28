@@ -74,15 +74,31 @@ st.set_page_config(
 # Custom CSS for Spread Capital branding
 st.markdown("""
 <style>
+    /* Make Streamlit's default header transparent and functional */
+    header[data-testid="stHeader"] {
+        background: rgba(0,0,0,0) !important; /* Fully transparent background */
+        height: 2.8rem !important; /* Keep a functional height for buttons */
+        pointer-events: auto !important; /* Ensure buttons are clickable */
+        z-index: 999999; /* Ensure it's always on top for interaction */
+        position: fixed; /* Keep it fixed at the top */
+        top: 0;
+        left: 0;
+        right: 0;
+    }
+    /* Remove Streamlit's default main menu styling if it interferes */
+    #MainMenu {
+        visibility: hidden; /* Hide the default Streamlit menu icon */
+    }
+
     /* Absolute Page Tightening */
     .block-container {
-        padding-top: 1.25rem !important;
+        padding-top: 3.5rem !important; /* Adjust to clear the fixed transparent Streamlit header */
         padding-bottom: 0rem !important;
         max-width: 98% !important;
     }
 
     /* Reduce vertical gaps between all Streamlit blocks */
-    [data-testid="stVerticalBlock"] {
+    [data-testid="stVerticalBlock"] { /* General vertical block spacing */
         gap: 0.4rem !important;
     }
     [data-testid="stHorizontalBlock"] {
@@ -91,7 +107,7 @@ st.markdown("""
 
     /* Compact Typography */
     h1 {
-        margin-top: -1.2rem !important;
+        margin-top: 0rem !important; /* Remove negative margin as block-container padding handles spacing */
         margin-bottom: 0.1rem !important;
         font-size: 1.8rem !important;
         line-height: 1.1 !important;
