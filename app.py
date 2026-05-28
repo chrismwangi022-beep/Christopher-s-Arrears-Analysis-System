@@ -361,11 +361,13 @@ def main():
     # New Branding Implementation: Image at the very top of the sidebar
     st.sidebar.image("assets/developer_branding.png", width=170)
 
-    # Removed previous main page header branding and its separator
-    # col_h1, col_h2 = st.columns([1, 9])
-    # with col_h1: st.image("assets/sc_logo_header.png", width=100)
-    # with col_h2: st.title("Spread Capital Arrears Analysis System")
-    # st.markdown("---")
+    # Main Page Header Branding - Restored
+    col_h1, col_h2 = st.columns([1, 9])
+    with col_h1:
+        st.image("assets/sc_logo_header.png", width=100)
+    with col_h2:
+        st.title("Spread Capital Arrears Analysis System")
+    st.markdown("---")
 
     # Load data
     with st.spinner("Loading data..."):
