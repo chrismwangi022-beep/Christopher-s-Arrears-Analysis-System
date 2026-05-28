@@ -98,11 +98,16 @@ st.markdown("""
     /* Sidebar styling */
     [data-testid="stSidebar"] {
         background-color: #1E2A5E;
-        padding: 0.75rem 1rem !important;
     }
     
-    /* Global Sidebar Spacing Fix */
-    [data-testid="stSidebar"] .st-emotion-cache-1r6y4z { /* Target stVerticalBlock for general spacing */
+    /* Force content to the absolute top edge and override Streamlit padding */
+    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
+        padding-top: 0rem !important;
+        gap: 1.2rem !important;
+    }
+
+    /* Target specific Streamlit cache classes for sidebar vertical spacing */
+    [data-testid="stSidebar"] .st-emotion-cache-1r6y4z {
         gap: 1.2rem !important;
     }
 
@@ -323,21 +328,23 @@ st.markdown("""
         margin: 10px 0;
     }
 
-    /* Absolute Top Sidebar Branding - Subtle & Professional */
+    /* Sidebar Developer Branding - Pinned to absolute top */
     .sidebar-branding {
         font-family: 'Calibri', 'Segoe UI', sans-serif !important;
         font-style: italic !important;
         font-size: 0.68rem !important;
-        color: #FFFFFF !important;
+        color: #FFFFFF !important; /* Pure solid white */
         letter-spacing: 0.03em;
-        margin-top: -0.5rem !important;
-        margin-bottom: 0.8rem !important;
-        padding-left: 4px;
-        opacity: 0.9;
+        margin-top: -1.25rem !important; /* Pulls branding above default sidebar margins */
+        margin-bottom: 0.5rem !important;
+        padding-left: 5px;
+        padding-top: 10px;
+        opacity: 1 !important; /* No transparency or greyish fade */
+        display: block;
     }
     .sidebar-branding .name-choco {
         font-family: "Choco Cooky", "Comic Sans MS", cursive;
-        font-weight: bold !important;
+        font-weight: 800 !important; /* Strong bold for Christopher */
     }
     .footer-caption {
         text-align: center;
