@@ -110,6 +110,13 @@ st.markdown("""
     [data-testid="stSidebar"] .st-emotion-cache-1r6y4z {
         gap: 1.2rem !important;
     }
+    
+    /* Adjust top margin for the branding image in the sidebar */
+    [data-testid="stSidebar"] [data-testid="stImage"] {
+        margin-top: -1.5rem !important; /* Adjust as needed to pull it up */
+        margin-bottom: 0.5rem !important; /* Add a small space below the image */
+        padding-left: 10px !important; /* Keep slight left padding */
+    }
 
     /* Sidebar Headers and Labels - White & Calibri */
     [data-testid="stSidebar"] h1 {
@@ -351,33 +358,14 @@ def load_data():
 
 # Main app
 def main():
-    # Raw HTML Branding - Forced Visibility at Absolute Top
-    st.sidebar.markdown(
-        """
-        <div style="
-            color: white !important;
-            opacity: 1 !important;
-            font-style: italic !important;
-            font-size: 0.72rem !important;
-            margin-top: -2.2rem !important;
-            padding-left: 10px !important;
-            display: block !important;
-            width: 100%;
-            font-family: 'Calibri', 'Segoe UI', sans-serif !important;
-        ">
-            Developer_<span style="font-family: 'Choco Cooky', cursive !important; font-weight: bold !important;">Christopher</span>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+    # New Branding Implementation: Image at the very top of the sidebar
+    st.sidebar.image("assets/developer_branding.png", width=170)
 
-    # Main Page Header Branding
-    col_h1, col_h2 = st.columns([1, 9])
-    with col_h1:
-        st.image("assets/sc_logo_header.png", width=100)
-    with col_h2:
-        st.title("Spread Capital Arrears Analysis System")
-    st.markdown("---")
+    # Removed previous main page header branding and its separator
+    # col_h1, col_h2 = st.columns([1, 9])
+    # with col_h1: st.image("assets/sc_logo_header.png", width=100)
+    # with col_h2: st.title("Spread Capital Arrears Analysis System")
+    # st.markdown("---")
 
     # Load data
     with st.spinner("Loading data..."):
@@ -1202,10 +1190,7 @@ def main():
 
     # Footer Section - Branding Divider & Caption
     st.markdown("---")
-    st.markdown(
-        '<div class="footer-caption">Internal System • Developed by Developer_<strong>Christopher</strong></div>',
-        unsafe_allow_html=True
-    )
+    # Removed previous footer branding and its separator
 
 if __name__ == "__main__":
     main()
