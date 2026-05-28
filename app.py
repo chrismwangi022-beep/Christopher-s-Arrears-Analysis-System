@@ -327,25 +327,6 @@ st.markdown("""
         border-radius: 5px;
         margin: 10px 0;
     }
-
-    /* Sidebar Developer Branding - Pinned to absolute top */
-    .sidebar-branding {
-        font-family: 'Calibri', 'Segoe UI', sans-serif !important;
-        font-style: italic !important;
-        font-size: 0.68rem !important;
-        color: #FFFFFF !important; /* Pure solid white */
-        letter-spacing: 0.03em;
-        margin-top: -1.25rem !important; /* Pulls branding above default sidebar margins */
-        margin-bottom: 0.5rem !important;
-        padding-left: 5px;
-        padding-top: 10px;
-        opacity: 1 !important; /* No transparency or greyish fade */
-        display: block;
-    }
-    .sidebar-branding .name-choco {
-        font-family: "Choco Cooky", "Comic Sans MS", cursive;
-        font-weight: 800 !important; /* Strong bold for Christopher */
-    }
     .footer-caption {
         text-align: center;
         color: #A0AEC0;
@@ -371,7 +352,31 @@ def load_data():
 # Main app
 def main():
     # Sidebar Branding (Very Top)
-    st.sidebar.markdown('<div class="sidebar-branding">Developer_<span class="name-choco">Christopher</span></div>', unsafe_allow_html=True)
+    st.sidebar.markdown(
+        """
+        <div style="
+            margin-top: -1.85rem;
+            margin-bottom: 0.8rem;
+            padding-left: 6px;
+            display: block;
+            width: 100%;
+        ">
+            <span style="
+                color: #FFFFFF !important;
+                font-family: 'Calibri', 'Segoe UI', sans-serif !important;
+                font-style: italic !important;
+                font-size: 0.68rem !important;
+                letter-spacing: 0.03em !important;
+            ">
+                Developer_<span style="
+                    font-family: 'Choco Cooky', 'Comic Sans MS', cursive !important;
+                    font-weight: 800 !important;
+                ">Christopher</span>
+            </span>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
     # Main Page Header Branding
     col_h1, col_h2 = st.columns([1, 9])
