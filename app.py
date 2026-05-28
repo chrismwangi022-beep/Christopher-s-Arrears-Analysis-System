@@ -74,26 +74,33 @@ st.set_page_config(
 # Custom CSS for Spread Capital branding
 st.markdown("""
 <style>
-    /* Global Density Improvements */
-    /* Target Streamlit's main content block for general spacing */
-    .st-emotion-cache-z5fcl4 { /* This class might change, but targets the main content area's vertical stack */
-        gap: 0.5rem !important; /* Reduce default vertical gap */
+    /* Absolute Page Tightening */
+    .block-container {
+        padding-top: 1.25rem !important;
+        padding-bottom: 0rem !important;
+        max-width: 98% !important;
     }
-    .st-emotion-cache-1r6y4z { /* Another common Streamlit vertical block class */
-        gap: 0.5rem !important;
+
+    /* Reduce vertical gaps between all Streamlit blocks */
+    [data-testid="stVerticalBlock"] {
+        gap: 0.4rem !important;
     }
-    .st-emotion-cache-10q9071 { /* Yet another common Streamlit vertical block class */
-        gap: 0.5rem !important;
+    [data-testid="stHorizontalBlock"] {
+        gap: 0.75rem !important;
     }
-    /* Reduce margin for subheaders */
-    h2 {
-        margin-top: 0.75rem !important; /* mt-3 */
-        margin-bottom: 0.5rem !important; /* mb-2 */
+
+    /* Compact Typography */
+    h1 {
+        margin-top: -1.2rem !important;
+        margin-bottom: 0.1rem !important;
+        font-size: 1.8rem !important;
+        line-height: 1.1 !important;
     }
-    /* Reduce margin for horizontal rules */
-    hr {
-        margin-top: 0.5rem !important; /* mt-2 */
-        margin-bottom: 0.5rem !important; /* mb-2 */
+    h2 { margin-top: 0.6rem !important; margin-bottom: 0.4rem !important; font-size: 1.4rem !important; }
+    hr { 
+        margin-top: 0.35rem !important; 
+        margin-bottom: 0.35rem !important; 
+        opacity: 0.3;
     }
     /* Sidebar styling */
     [data-testid="stSidebar"] {
@@ -361,10 +368,10 @@ def main():
     # New Branding Implementation: Image at the very top of the sidebar
     st.sidebar.image("assets/developer_branding.png", width=170)
 
-    # Main Page Header Branding - Restored
-    col_h1, col_h2 = st.columns([1, 9])
+    # Main Page Header Branding - Minimalist Layout
+    col_h1, col_h2 = st.columns([0.6, 9.4])
     with col_h1:
-        st.image("assets/sc_logo_header.png", width=100)
+        st.image("assets/sc_logo_header.png", width=65)
     with col_h2:
         st.title("Spread Capital Arrears Analysis System")
     st.markdown("---")
