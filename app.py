@@ -351,28 +351,21 @@ def load_data():
 
 # Main app
 def main():
-    # Sidebar Branding (Very Top)
+    # Raw HTML Branding - Forced Visibility at Absolute Top
     st.sidebar.markdown(
         """
         <div style="
-            margin-top: -1.85rem;
-            margin-bottom: 0.8rem;
-            padding-left: 6px;
-            display: block;
+            color: white !important;
+            opacity: 1 !important;
+            font-style: italic !important;
+            font-size: 0.72rem !important;
+            margin-top: -2.2rem !important;
+            padding-left: 10px !important;
+            display: block !important;
             width: 100%;
+            font-family: 'Calibri', 'Segoe UI', sans-serif !important;
         ">
-            <span style="
-                color: #FFFFFF !important;
-                font-family: 'Calibri', 'Segoe UI', sans-serif !important;
-                font-style: italic !important;
-                font-size: 0.68rem !important;
-                letter-spacing: 0.03em !important;
-            ">
-                Developer_<span style="
-                    font-family: 'Choco Cooky', 'Comic Sans MS', cursive !important;
-                    font-weight: 800 !important;
-                ">Christopher</span>
-            </span>
+            Developer_<span style="font-family: 'Choco Cooky', cursive !important; font-weight: bold !important;">Christopher</span>
         </div>
         """,
         unsafe_allow_html=True
