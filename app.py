@@ -107,9 +107,12 @@ st.markdown("""
 
     /* Compact Typography */
     h1 {
-        margin-top: 0rem !important; /* Remove negative margin as block-container padding handles spacing */
+        /* Increased font size for main application header */
+        font-size: 2.8rem !important; /* Visually dominant size */
+        font-weight: 800 !important; /* Bold for prominence */
+        letter-spacing: -0.03em !important; /* Subtle letter spacing */
+        margin-top: 0rem !important;
         margin-bottom: 0.1rem !important;
-        font-size: 1.8rem !important;
         line-height: 1.1 !important;
     }
     h2 { margin-top: 0.6rem !important; margin-bottom: 0.4rem !important; font-size: 1.4rem !important; }
