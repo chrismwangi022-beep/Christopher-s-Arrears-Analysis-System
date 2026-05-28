@@ -98,7 +98,7 @@ st.markdown("""
     /* Sidebar styling */
     [data-testid="stSidebar"] {
         background-color: #1E2A5E;
-        padding: 1.5rem 1rem !important;
+        padding: 0.75rem 1rem !important;
     }
     
     /* Global Sidebar Spacing Fix */
@@ -323,20 +323,21 @@ st.markdown("""
         margin: 10px 0;
     }
 
-    /* Sidebar Branding Styling - Subtle & Professional */
+    /* Absolute Top Sidebar Branding - Subtle & Professional */
     .sidebar-branding {
-        font-family: 'Calibri', 'Segoe UI', sans-serif;
-        font-style: italic;
-        font-size: 0.72rem;
-        color: rgba(255, 255, 255, 0.45);
-        letter-spacing: 0.04em;
-        margin-bottom: 0.8rem;
-        padding-left: 2px;
+        font-family: 'Calibri', 'Segoe UI', sans-serif !important;
+        font-style: italic !important;
+        font-size: 0.68rem !important;
+        color: #FFFFFF !important;
+        letter-spacing: 0.03em;
+        margin-top: -0.5rem !important;
+        margin-bottom: 0.8rem !important;
+        padding-left: 4px;
+        opacity: 0.9;
     }
     .sidebar-branding .name-choco {
         font-family: "Choco Cooky", "Comic Sans MS", cursive;
-        font-weight: bold;
-        color: #00D1FF;
+        font-weight: bold !important;
     }
     .footer-caption {
         text-align: center;
