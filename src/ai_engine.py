@@ -228,21 +228,21 @@ def _clean_metrics(obj: Any) -> Any:
     - nested dicts/lists
     """
 
-    # Return early for standard Python primitives
-    if isinstance(obj, (int, float, str, bool)) or obj is None:
+    # Handle common non-serializable types recursively
+    if obj is None or isinstance(obj, (str, bool)):
         return obj
+        
+    # Handle numeric types (Numpy and Python)
+    if hasattr(obj, 'dtype'): # Numpy types
+        if 'int' in str(obj.dtype): return int(obj)
+        if 'float' in str(obj.dtype):
+            val = float(obj)
+            return 0.0 if (pd.isna(val) or np.isinf(val)) else round(val, 2)
 
-    try:
-        import numpy as np
-
-        if isinstance(obj, np.integer):
-            return int(obj)
-
-        if isinstance(obj, np.floating):
-            return round(float(obj), 2)
-
-    except Exception:
-        pass
+    if isinstance(obj, (int, float)):
+        if pd.isna(obj) or (isinstance(obj, float) and np.isinf(obj)):
+            return 0.0
+        return obj if isinstance(obj, int) else round(float(obj), 2)
 
     # datetime / pandas timestamp - Using getattr to avoid static analysis warnings
     iso_method = getattr(obj, "isoformat", None)
@@ -331,8 +331,8 @@ def generate_ai_insights(metrics: dict[str, Any]) -> dict[str, str]:
             
         return results
         
-    except Exception:
-        # Absolute safety net: Switch to local insights on any failure
+    except Exception as e:
+        print(f"CRITICAL: AI Pipeline Failure: {str(e)}")
         return generate_local_insights(metrics)
 
 @st.cache_data(ttl=3600, show_spinner="🚨 Preparing Weekly Recovery Intelligence...")

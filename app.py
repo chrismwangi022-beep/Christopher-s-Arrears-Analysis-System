@@ -684,20 +684,9 @@ def main():
     # Enforce Architectural Rule: Move all KPI math to src/calculations.py
     metrics = get_standard_metrics_package(df_display, df)
     
-    # Refine Officer Data: Prevent cross-portfolio/branch contamination in AI insights
-    # Business Rule: Each officer only receives actions for their own assigned accounts.
-    officer_analysis = {}
-    for officer in df_display['Loan_Officer'].dropna().unique():
-        off_df = df_display[df_display['Loan_Officer'] == officer]
-        if off_df.empty: continue
-        
-        officer_analysis[officer] = {
-            "Branch": off_df['Branch'].iloc[0] if 'Branch' in off_df.columns else "Unassigned",
-            "Arrears": float(off_df['Arrears'].sum()),
-            "Avg_Days": float(off_df['Days'].mean()),
-            "Account_Count": int(len(off_df))
-        }
-    metrics['officer_summary'] = dict(sorted(officer_analysis.items(), key=lambda x: x[1]['Arrears'], reverse=True))
+    # Debug Logs for Production Monitoring (Visibility in Streamlit Cloud logs)
+    print(f"DEBUG: Data Context - Display: {len(df_display)} rows, Full: {len(df)} rows")
+    print(f"DEBUG: Metrics Check - Arrears: {metrics.get('total_arrears', 'MISSING')}")
 
     total_arrears = metrics["total_arrears"]
     total_portfolio = metrics["total_portfolio"]
