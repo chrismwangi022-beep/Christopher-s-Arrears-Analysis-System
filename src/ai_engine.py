@@ -24,12 +24,13 @@ from typing import Any
 
 import streamlit as st
 
-# Safe Import Guard for OpenAI / OpenRouter
+# Safe Import Guard for Google Gemini SDK
 try:
-    from openai import OpenAI
-    HAS_OPENAI = True
+    from google import genai
+    from google.genai import types
+    HAS_GENAI = True
 except ImportError:
-    HAS_OPENAI = False
+    HAS_GENAI = False
 
 from .ai_agents import (
     RISK_ANALYST_SYSTEM_PROMPT,
@@ -43,7 +44,7 @@ from .ai_agents import (
 # MODEL CONFIG
 # ─────────────────────────────────────────────
 
-MODEL_NAME = "deepseek/deepseek-chat"
+MODEL_NAME = "gemini-1.5-flash"
 ORCHESTRATOR_DIRECTIVE = "Interpret the provided JSON data according to your analytical persona. Provide the structured executive summary now."
 MAX_RETRIES = 2
 INITIAL_BACKOFF = 2  # seconds
@@ -169,37 +170,32 @@ def _execute_agent_call(data: dict, system_prompt: str) -> str:
     """
     Unified production runner for all AI agents with model fallback and exponential backoff.
     """
-    if not HAS_OPENAI:
-        # Return an error signature that triggers generate_local_insights
-        return "⚠️ OpenAI/OpenRouter library missing from requirements.txt."
+    if not HAS_GENAI:
+        return "⚠️ Google GenAI library missing from requirements.txt."
 
     if "ai_client" not in st.session_state:
-        api_key = st.secrets.get("OPENROUTER_API_KEY")
+        api_key = st.secrets.get("GEMINI_API_KEY")
         if not api_key or "REPLACE_WITH" in str(api_key):
-            return "⚠️ Missing OPENROUTER_API_KEY configuration."
+            return "⚠️ Missing GEMINI_API_KEY configuration."
             
         try:
-            st.session_state.ai_client = OpenAI(
-                base_url="https://openrouter.ai/api/v1",
-                api_key=api_key,
-            )
+            st.session_state.ai_client = genai.Client(api_key=api_key)
         except Exception as e:
             return f"⚠️ API Initialization Error: {str(e)}"
 
     metrics_json = format_metrics(data)
 
     try:
-        response = st.session_state.ai_client.chat.completions.create(
+        response = st.session_state.ai_client.models.generate_content(
             model=MODEL_NAME,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"DATA:\n{metrics_json}"}
-            ],
-            temperature=0.3,
-            max_tokens=700
+            contents=f"DATA:\n{metrics_json}",
+            config=types.GenerateContentConfig(
+                system_instruction=system_prompt,
+                temperature=0.3,
+                max_output_tokens=700,
+            )
         )
-        content = response.choices[0].message.content
-        return content.strip() if content else ""
+        return response.text.strip() if response.text else ""
     except Exception as e:
         return f"🛡️ AI Service Temporarily Busy: {str(e)}"
 
@@ -292,16 +288,16 @@ def get_ai_health_state() -> dict[str, Any]:
     """Initializes and returns the AI health tracking state for the dashboard."""
     if "ai_health" not in st.session_state:
         # Pre-flight check: Key must exist AND library must be installed
-        api_key = st.secrets.get("OPENROUTER_API_KEY")
+        api_key = st.secrets.get("GEMINI_API_KEY")
         key_is_valid = api_key is not None and "REPLACE_WITH" not in str(api_key)
         
-        is_functional = HAS_OPENAI and key_is_valid
+        is_functional = HAS_GENAI and key_is_valid
         st.session_state.ai_health = {
             "status": "Online" if is_functional else "Offline",
             "is_local": not is_functional,
             "last_success": "N/A",
-            "model": "DeepSeek (OpenRouter)" if is_functional else "Deterministic Engine",
-            "error": "" if is_functional else ("Library missing" if not HAS_OPENAI else "Invalid/Placeholder API Key")
+            "model": "Gemini 1.5 Flash (Google)" if is_functional else "Deterministic Engine",
+            "error": "" if is_functional else ("Library missing" if not HAS_GENAI else "Invalid/Placeholder API Key")
         }
     return st.session_state.ai_health
 
@@ -313,14 +309,14 @@ def generate_ai_insights(metrics: dict[str, Any]) -> dict[str, str]:
     """
     try:
         # Early exit if API key is missing
-        if not HAS_OPENAI or not st.secrets.get("OPENROUTER_API_KEY"):
+        if not HAS_GENAI or not st.secrets.get("GEMINI_API_KEY"):
             return generate_local_insights(metrics)
 
         # Attempt multi-agent AI analysis
         results = run_multi_agent_analysis(metrics)
 
-        # Append the DeepSeek footer to the executive summary
-        footer = f"\n\n---\n📈 AI Analytics Engine · DeepSeek AI · Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+        # Append the Gemini footer to the executive summary
+        footer = f"\n\n---\n📈 AI Analytics Engine · Google Gemini · Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
         if "executive_summary" in results and not results["executive_summary"].startswith(("⚠️", "🛡️")):
             results["executive_summary"] += footer
         
@@ -403,34 +399,29 @@ def generate_weekly_recovery_reports(df: pd.DataFrame) -> dict[str, str]:
 
 def _execute_recovery_manager_call(data: dict) -> str:
     """Private runner for the Recovery Manager Agent."""
-    if not HAS_OPENAI or not st.secrets.get("OPENROUTER_API_KEY"):
+    if not HAS_GENAI or not st.secrets.get("GEMINI_API_KEY"):
         return f"🚨 [LOCAL FALLBACK] Recovery Report for {data['branch']}: Week movement is {data['net_movement']:,.0f}. Immediate field action required."
 
     if "ai_client" not in st.session_state:
-        api_key = st.secrets.get("OPENROUTER_API_KEY")
+        api_key = st.secrets.get("GEMINI_API_KEY")
         if not api_key:
             return "⚠️ Missing API Key"
             
         try:
-            st.session_state.ai_client = OpenAI(
-                base_url="https://openrouter.ai/api/v1",
-                api_key=api_key,
-            )
+            st.session_state.ai_client = genai.Client(api_key=api_key)
         except:
             return "⚠️ Connection Error"
 
     try:
-        # Using deepseek-chat for aggressive reasoning
-        response = st.session_state.ai_client.chat.completions.create(
+        response = st.session_state.ai_client.models.generate_content(
             model=MODEL_NAME,
-            messages=[
-                {"role": "system", "content": RECOVERY_MANAGER_PROMPT},
-                {"role": "user", "content": f"WEEKLY METRICS:\n{json.dumps(data, indent=2)}"}
-            ],
-            temperature=0.5,
-            max_tokens=1000
+            contents=f"WEEKLY METRICS:\n{json.dumps(data, indent=2)}",
+            config=types.GenerateContentConfig(
+                system_instruction=RECOVERY_MANAGER_PROMPT,
+                temperature=0.5,
+                max_output_tokens=1000,
+            )
         )
-        content = response.choices[0].message.content
-        return content.strip() if content else ""
+        return response.text.strip() if response.text else ""
     except Exception as e:
         return f"🛡️ Recovery AI Busy: {str(e)}"
