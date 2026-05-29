@@ -175,7 +175,7 @@ def _execute_agent_call(data: dict, system_prompt: str) -> str:
 
     if "ai_client" not in st.session_state:
         api_key = st.secrets.get("OPENROUTER_API_KEY")
-        if not api_key:
+        if not api_key or "REPLACE_WITH" in str(api_key):
             return "⚠️ Missing OPENROUTER_API_KEY configuration."
             
         try:
@@ -292,13 +292,16 @@ def get_ai_health_state() -> dict[str, Any]:
     """Initializes and returns the AI health tracking state for the dashboard."""
     if "ai_health" not in st.session_state:
         # Pre-flight check: Key must exist AND library must be installed
-        is_functional = HAS_OPENAI and st.secrets.get("OPENROUTER_API_KEY") is not None
+        api_key = st.secrets.get("OPENROUTER_API_KEY")
+        key_is_valid = api_key is not None and "REPLACE_WITH" not in str(api_key)
+        
+        is_functional = HAS_OPENAI and key_is_valid
         st.session_state.ai_health = {
             "status": "Online" if is_functional else "Offline",
             "is_local": not is_functional,
             "last_success": "N/A",
             "model": "DeepSeek (OpenRouter)" if is_functional else "Deterministic Engine",
-            "error": "" if is_functional else ("Library missing" if not HAS_OPENAI else "Missing OPENROUTER_API_KEY")
+            "error": "" if is_functional else ("Library missing" if not HAS_OPENAI else "Invalid/Placeholder API Key")
         }
     return st.session_state.ai_health
 

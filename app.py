@@ -494,8 +494,10 @@ def main():
     status_label, status_type = status_map.get(ai_health["status"], ("⚪ Initializing", "info"))
     
     # AI Configuration Safety Check
-    if not get_secret("GEMINI_API_KEY") or not get_secret("OPENROUTER_API_KEY"):
-        st.sidebar.warning("⚠️ Missing API key configuration")
+    openrouter_key = get_secret("OPENROUTER_API_KEY")
+    if not openrouter_key or "REPLACE_WITH" in str(openrouter_key):
+        st.sidebar.warning("⚠️ AI Keys Not Configured")
+        st.sidebar.caption("Please update `.streamlit/secrets.toml` with your real API keys.")
     
     if status_type == "success": 
         st.sidebar.success(status_label)
