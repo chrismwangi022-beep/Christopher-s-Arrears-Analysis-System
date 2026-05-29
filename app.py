@@ -64,6 +64,7 @@ from src.constants import (
 )
 from weekly_recovery_gemini import update_historical_snapshots
 from src.recovery_engine.builder import RecoveryEngineBuilder # NEW RECOVERY ENGINE INTEGRATION
+from src.recovery_engine.builder import build_weekly_recovery_report # NEW RECOVERY ENGINE INTEGRATION
 from src.branch_ai import render_branch_intelligence
 
 # Page configuration
@@ -1201,10 +1202,13 @@ def main():
                     try:
                         builder = RecoveryEngineBuilder()
                         report_result = builder.build_weekly_recovery_report(branch_name, df_display, df)
+                        # NEW RECOVERY ENGINE INTEGRATION
+                        report_result = build_weekly_recovery_report(branch_name, df_display, df)
                         st.session_state["weekly_reports_cache"][cache_key] = report_result
                         st.rerun()
                     except Exception as e:
                         st.error(f"Failed to generate recovery report: {str(e)}")
+                        st.error(f"Recovery Engine Error: {str(e)}")
 
         with col_ai2:
             if report_result:
@@ -1212,6 +1216,8 @@ def main():
                     with st.spinner("Refreshing intelligence..."):
                         builder = RecoveryEngineBuilder()
                         st.session_state["weekly_reports_cache"][cache_key] = builder.build_weekly_recovery_report(branch_name, df_display, df)
+                        # NEW RECOVERY ENGINE INTEGRATION
+                        st.session_state["weekly_reports_cache"][cache_key] = build_weekly_recovery_report(branch_name, df_display, df)
                         st.rerun()
 
         # NEW RECOVERY ENGINE INTEGRATION - Rendering & Diagnostics

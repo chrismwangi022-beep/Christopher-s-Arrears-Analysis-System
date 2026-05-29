@@ -1,13 +1,3 @@
 """
-Recovery Engine Subpackage
+Spread Capital Analysis System - Core Package
 """
-
-from .builder import RecoveryEngineBuilder
-from .schema import RecoveryReport, RecoveryMetrics, RecoverySummary
-
-__all__ = [
-    "RecoveryEngineBuilder", 
-    "RecoveryReport", 
-    "RecoveryMetrics", 
-    "RecoverySummary"
-]
