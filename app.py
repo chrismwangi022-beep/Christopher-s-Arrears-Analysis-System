@@ -63,7 +63,6 @@ from src.constants import (
     DATA_FOLDER,
 )
 from weekly_recovery_gemini import update_historical_snapshots
-from src.recovery_engine.builder import build_weekly_recovery_report # NEW RECOVERY ENGINE INTEGRATION
 from src.branch_ai import render_branch_intelligence
 
 # Page configuration
@@ -1198,7 +1197,8 @@ def main():
             if st.button("🚀 Generate Weekly Report (Recovery Engine)", use_container_width=True):
                 with st.spinner(f"📡 Accessing Recovery Command for {branch_name}..."):
                     try:
-                        # NEW RECOVERY ENGINE INTEGRATION
+                        # NEW RECOVERY ENGINE INTEGRATION - Local Import for safety
+                        from src.recovery_engine.builder import build_weekly_recovery_report
                         report_result = build_weekly_recovery_report(branch_name, df_display, df)
                         st.session_state["weekly_reports_cache"][cache_key] = report_result
                         st.rerun()
@@ -1209,7 +1209,8 @@ def main():
             if report_result:
                 if st.button("♻️ Regenerate Report", use_container_width=True):
                     with st.spinner("Refreshing intelligence..."):
-                        # NEW RECOVERY ENGINE INTEGRATION
+                        # NEW RECOVERY ENGINE INTEGRATION - Local Import for safety
+                        from src.recovery_engine.builder import build_weekly_recovery_report
                         st.session_state["weekly_reports_cache"][cache_key] = build_weekly_recovery_report(branch_name, df_display, df)
                         st.rerun()
 
