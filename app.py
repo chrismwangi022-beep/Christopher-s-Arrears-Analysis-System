@@ -63,7 +63,7 @@ from src.constants import (
     DATA_FOLDER,
 )
 from weekly_recovery_gemini import update_historical_snapshots
-from builder import RecoveryEngineBuilder # NEW RECOVERY ENGINE INTEGRATION
+from src.recovery_engine.builder import RecoveryEngineBuilder # NEW RECOVERY ENGINE INTEGRATION
 from src.branch_ai import render_branch_intelligence
 
 # Page configuration

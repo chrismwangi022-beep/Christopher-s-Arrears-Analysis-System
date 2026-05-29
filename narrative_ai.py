@@ -6,7 +6,7 @@ professional narrative insights.
 """
 
 from typing import Dict, Any
-from schema import RecoveryMetrics
+from .schema import RecoveryMetrics
 
 class NarrativeGenerator:
     """Interface for AI model interaction for report narrativization."""
