@@ -72,6 +72,14 @@ st.set_page_config(
     layout="wide"
 )
 
+# --- Secrets Configuration Helper ---
+def get_secret(key, default=None):
+    """Safely retrieves a secret from st.secrets to prevent app crashes."""
+    try:
+        return st.secrets.get(key, default)
+    except Exception:
+        return default
+
 # Custom CSS for Spread Capital branding
 st.markdown("""
 <style>
@@ -485,7 +493,12 @@ def main():
     }
     status_label, status_type = status_map.get(ai_health["status"], ("⚪ Initializing", "info"))
     
-    if status_type == "success": st.sidebar.success(status_label)
+    # AI Configuration Safety Check
+    if not get_secret("GEMINI_API_KEY") or not get_secret("OPENROUTER_API_KEY"):
+        st.sidebar.warning("⚠️ Missing API key configuration")
+    
+    if status_type == "success": 
+        st.sidebar.success(status_label)
     elif status_type == "warning": st.sidebar.warning(status_label)
     else: st.sidebar.error(status_label)
 
@@ -511,9 +524,10 @@ def main():
         st.sidebar.success(st.session_state.upload_success)
         del st.session_state['upload_success']
     
+    admin_pwd = get_secret("ADMIN_PASSWORD")
     password_input = st.sidebar.text_input("Administrator Credentials", type="password", placeholder="Enter Password")
     
-    if password_input == st.secrets["ADMIN_PASSWORD"]:
+    if admin_pwd and password_input == admin_pwd:
         uploaded_files = st.sidebar.file_uploader(
             "Upload & Save Daily Reports",
             type=['csv', 'xlsx'],
@@ -567,7 +581,7 @@ def main():
                         git_error_message = "❌ GitPython library not installed. Please run 'pip install GitPython'."
                     else:
                         # 1. Securely fetch the token
-                        token = st.secrets.get("GITHUB_TOKEN")
+                        token = get_secret("GITHUB_TOKEN")
                         if not token:
                             git_error_message = "❌ GITHUB_TOKEN not found in Streamlit Secrets."
                         else:

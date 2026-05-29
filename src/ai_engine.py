@@ -174,10 +174,14 @@ def _execute_agent_call(data: dict, system_prompt: str) -> str:
         return "⚠️ OpenAI/OpenRouter library missing from requirements.txt."
 
     if "ai_client" not in st.session_state:
+        api_key = st.secrets.get("OPENROUTER_API_KEY")
+        if not api_key:
+            return "⚠️ Missing OPENROUTER_API_KEY configuration."
+            
         try:
             st.session_state.ai_client = OpenAI(
                 base_url="https://openrouter.ai/api/v1",
-                api_key=st.secrets["OPENROUTER_API_KEY"],
+                api_key=api_key,
             )
         except Exception as e:
             return f"⚠️ API Initialization Error: {str(e)}"
@@ -288,7 +292,7 @@ def get_ai_health_state() -> dict[str, Any]:
     """Initializes and returns the AI health tracking state for the dashboard."""
     if "ai_health" not in st.session_state:
         # Pre-flight check: Key must exist AND library must be installed
-        is_functional = HAS_OPENAI and "OPENROUTER_API_KEY" in st.secrets
+        is_functional = HAS_OPENAI and st.secrets.get("OPENROUTER_API_KEY") is not None
         st.session_state.ai_health = {
             "status": "Online" if is_functional else "Offline",
             "is_local": not is_functional,
@@ -400,10 +404,14 @@ def _execute_recovery_manager_call(data: dict) -> str:
         return f"🚨 [LOCAL FALLBACK] Recovery Report for {data['branch']}: Week movement is {data['net_movement']:,.0f}. Immediate field action required."
 
     if "ai_client" not in st.session_state:
+        api_key = st.secrets.get("OPENROUTER_API_KEY")
+        if not api_key:
+            return "⚠️ Missing API Key"
+            
         try:
             st.session_state.ai_client = OpenAI(
                 base_url="https://openrouter.ai/api/v1",
-                api_key=st.secrets["OPENROUTER_API_KEY"],
+                api_key=api_key,
             )
         except:
             return "⚠️ Connection Error"
