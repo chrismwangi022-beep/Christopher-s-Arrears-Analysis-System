@@ -8,7 +8,7 @@ Includes deterministic validation for numeric consistency and structural repair.
 import pandas as pd
 import logging
 from typing import Tuple, List, Optional, Dict, Any
-from .schema import RecoveryReport
+from schema import RecoveryReport
 
 # Setup specialized logger for the Recovery Engine
 logging.basicConfig(level=logging.INFO)

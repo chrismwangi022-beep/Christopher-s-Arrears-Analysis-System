@@ -5,7 +5,7 @@ Formatting logic for different output channels (Streamlit UI, WhatsApp, PDF).
 """
 
 from typing import Dict, Any, List
-from .schema import RecoveryReport
+from schema import RecoveryReport
 
 class ReportRenderer:
     """Converts RecoveryReport objects into user-facing formats."""

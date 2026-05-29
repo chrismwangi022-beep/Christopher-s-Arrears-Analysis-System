@@ -6,7 +6,7 @@ Streamlit-compatible caching layer for recovery reports.
 
 import streamlit as st
 from typing import Optional
-from .schema import RecoveryReport
+from schema import RecoveryReport
 
 class RecoveryCache:
     """Handles persistence of generated reports in session state or memory."""
