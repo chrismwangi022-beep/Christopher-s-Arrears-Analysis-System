@@ -130,6 +130,7 @@ st.markdown("""
     .custom-app-header {
         display: flex;
         align-items: center; /* Vertically center items */
+        justify-content: flex-start; /* Align items to the start of the flex container */
         gap: 12px; /* Space between logo and title */
         padding: 0 !important; /* Remove default padding */
         margin: 0 !important; /* Remove default margin */
@@ -429,11 +430,15 @@ def main():
     st.sidebar.image("assets/developer_branding.png", width=170)
 
     # Main Page Header Branding - Minimalist Layout
-    col_h1, col_h2 = st.columns([0.6, 9.4])
-    with col_h1:
-        st.image("assets/sc_logo_header.png", width=65)
-    with col_h2:
-        st.title("Spread Capital Arrears Analysis System")
+    # Refactored to use custom HTML/CSS for pixel-perfect vertical alignment
+    st.markdown(
+        f"""
+        <div class="custom-app-header">
+            <img src="assets/sc_logo_header.png">
+            <h1 class="app-title">Spread Capital Arrears Analysis System</h1>
+        </div>
+        """, unsafe_allow_html=True
+    )
     st.markdown("---")
 
     # Load data
