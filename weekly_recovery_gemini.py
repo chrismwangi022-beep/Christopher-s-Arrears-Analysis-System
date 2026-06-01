@@ -8,10 +8,11 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 try:
-    import google.generativeai as genai
-    HAS_GOOGLE_AI = True
+    from google import genai
+    from google.genai import types
+    HAS_GENAI = True
 except ImportError:
-    HAS_GOOGLE_AI = False
+    HAS_GENAI = False
 
 # Fallback for Streamlit environment
 import streamlit as st
@@ -89,8 +90,7 @@ def verify_gemini_setup() -> dict:
     if api_key:
         report["api_key_found"] = True
         try:
-            genai.configure(api_key=api_key)
-            model = genai.GenerativeModel('gemini-2.5-flash')
+            client = genai.Client(api_key=api_key)
             # Lightweight check for model initialization
             report["model_accessible"] = True
         except Exception as e:
@@ -295,8 +295,7 @@ def generate_weekly_narrative(summary: dict) -> str:
         return "SYSTEM ERROR: Gemini API Key not configured."
 
     try:
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel("gemini-2.5-flash")
+        client = genai.Client(api_key=api_key)
 
         # Prepare officer metrics for analysis
         all_officers = summary['worst_officers'] + summary['best_officers']
@@ -390,13 +389,15 @@ Positive Signals:
 - No partial officer entries allowed
 - Output must be complete and consistent
 """
-        config = {
-            "temperature": 0.4,
-            "max_output_tokens": 2200
-        }
-
-        response = model.generate_content(prompt, generation_config=config, request_options={"timeout": 40})
-        return response.text.strip()
+        response = client.models.generate_content(
+            model="gemini-1.5-flash",
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                temperature=0.4,
+                max_output_tokens=2200,
+            )
+        )
+        return response.text.strip() if response.text else ""
 
     except Exception as e:
         return f"Gemini Narrative Error: {str(e)}"

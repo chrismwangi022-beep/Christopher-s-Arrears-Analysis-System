@@ -17,6 +17,7 @@ import sys
 import os
 import io
 import tempfile
+import hashlib
 import stat
 
 try:
@@ -61,7 +62,7 @@ from src.constants import (
     CHART_CONFIG,
     DATA_FOLDER,
 )
-from weekly_recovery_gemini import generate_weekly_report, update_historical_snapshots, parse_radar_intelligence
+from weekly_recovery_gemini import update_historical_snapshots
 from src.branch_ai import render_branch_intelligence
 
 # Page configuration
@@ -70,6 +71,14 @@ st.set_page_config(
     page_icon="assets/sc_favicon_32.png",
     layout="wide"
 )
+
+# --- Secrets Configuration Helper ---
+def get_secret(key, default=None):
+    """Safely retrieves a secret from st.secrets to prevent app crashes."""
+    try:
+        return st.secrets.get(key, default)
+    except Exception:
+        return default
 
 # Custom CSS for Spread Capital branding
 st.markdown("""
@@ -516,7 +525,14 @@ def main():
     }
     status_label, status_type = status_map.get(ai_health["status"], ("⚪ Initializing", "info"))
     
-    if status_type == "success": st.sidebar.success(status_label)
+    # AI Configuration Safety Check
+    openrouter_key = get_secret("OPENROUTER_API_KEY")
+    if not openrouter_key or "REPLACE_WITH" in str(openrouter_key):
+        st.sidebar.warning("⚠️ AI Keys Not Configured")
+        st.sidebar.caption("Please update `.streamlit/secrets.toml` with your real API keys.")
+    
+    if status_type == "success": 
+        st.sidebar.success(status_label)
     elif status_type == "warning": st.sidebar.warning(status_label)
     else: st.sidebar.error(status_label)
 
@@ -542,9 +558,10 @@ def main():
         st.sidebar.success(st.session_state.upload_success)
         del st.session_state['upload_success']
     
+    admin_pwd = get_secret("ADMIN_PASSWORD")
     password_input = st.sidebar.text_input("Administrator Credentials", type="password", placeholder="Enter Password")
     
-    if password_input == st.secrets["ADMIN_PASSWORD"]:
+    if admin_pwd and password_input == admin_pwd:
         uploaded_files = st.sidebar.file_uploader(
             "Upload & Save Daily Reports",
             type=['csv', 'xlsx'],
@@ -598,7 +615,7 @@ def main():
                         git_error_message = "❌ GitPython library not installed. Please run 'pip install GitPython'."
                     else:
                         # 1. Securely fetch the token
-                        token = st.secrets.get("GITHUB_TOKEN")
+                        token = get_secret("GITHUB_TOKEN")
                         if not token:
                             git_error_message = "❌ GITHUB_TOKEN not found in Streamlit Secrets."
                         else:
@@ -699,20 +716,9 @@ def main():
     # Enforce Architectural Rule: Move all KPI math to src/calculations.py
     metrics = get_standard_metrics_package(df_display, df)
     
-    # Refine Officer Data: Prevent cross-portfolio/branch contamination in AI insights
-    # Business Rule: Each officer only receives actions for their own assigned accounts.
-    officer_analysis = {}
-    for officer in df_display['Loan_Officer'].dropna().unique():
-        off_df = df_display[df_display['Loan_Officer'] == officer]
-        if off_df.empty: continue
-        
-        officer_analysis[officer] = {
-            "Branch": off_df['Branch'].iloc[0] if 'Branch' in off_df.columns else "Unassigned",
-            "Arrears": float(off_df['Arrears'].sum()),
-            "Avg_Days": float(off_df['Days'].mean()),
-            "Account_Count": int(len(off_df))
-        }
-    metrics['officer_summary'] = dict(sorted(officer_analysis.items(), key=lambda x: x[1]['Arrears'], reverse=True))
+    # Debug Logs for Production Monitoring (Visibility in Streamlit Cloud logs)
+    print(f"DEBUG: Data Context - Display: {len(df_display)} rows, Full: {len(df)} rows")
+    print(f"DEBUG: Metrics Check - Arrears: {metrics.get('total_arrears', 'MISSING')}")
 
     total_arrears = metrics["total_arrears"]
     total_portfolio = metrics["total_portfolio"]
@@ -1176,77 +1182,103 @@ def main():
         if "weekly_reports_cache" not in st.session_state:
             st.session_state["weekly_reports_cache"] = {}
             
-        st.markdown("---")
-        
-        # Match the cache key logic used in the Weekly Report generator
+        # NEW RECOVERY ENGINE INTEGRATION - Cache Key with Data Integrity Hash
         now = pd.Timestamp.now().normalize()
         monday_date = (now - pd.Timedelta(days=now.weekday())).strftime('%Y-%m-%d')
-        cache_key = f"{branch_name}_{monday_date}"
+        # Generate hash to detect if underlying data has changed
+        df_hash = hashlib.md5(pd.util.hash_pandas_object(df_display, index=True).values.tobytes()).hexdigest()
+        cache_key = f"{branch_name}_{monday_date}_{df_hash}"
         
-        report_data = st.session_state["weekly_reports_cache"].get(cache_key)
-        
-        # Structured Radar Parsing Logic for UI Rendering
-        radar_obj = {}
-        if isinstance(report_data, dict):
-            radar_obj = report_data.get("radar", {})
-        elif isinstance(report_data, str):
-            radar_obj = parse_radar_intelligence(report_data)
+        report_result = st.session_state["weekly_reports_cache"].get(cache_key)
 
-        if radar_obj and any(radar_obj.values()):
+        st.markdown("---")
+
+        # NEW RECOVERY ENGINE INTEGRATION - Structured Radar Feed
+        if report_result and report_result.get("structured_report"):
+            struct = report_result["structured_report"]
             with st.container(border=True):
                 st.markdown("### 📡 Branch Intelligence Feed")
                 r_col1, r_col2 = st.columns(2)
                 with r_col1:
-                    if radar_obj.get("alerts"):
+                    # High priority alerts from operational intelligence
+                    alerts = struct.get("operational_alerts", [])
+                    if alerts:
                         st.markdown("**🚨 Priority Alerts**")
-                        for item in radar_obj["alerts"]: st.info(item)
-                    if radar_obj.get("watchlist"):
+                        for item in alerts: st.info(item)
+                    
+                    # Watchlist derived from high-risk officer statuses
+                    watchlist = [off.get("name") for off in struct.get("officer_risks", []) 
+                                 if "Needs attention" in off.get("status", "") or "Critical" in off.get("status", "")]
+                    if watchlist:
                         st.markdown("**👁️ Officer Watchlist**")
-                        for item in radar_obj["watchlist"]: st.warning(item)
+                        for item in watchlist: st.warning(item)
                 with r_col2:
-                    if radar_obj.get("concerns"):
+                    # Operational concerns derived from recovery priorities
+                    concerns = struct.get("recovery_actions", [])
+                    if concerns:
                         st.markdown("**⚠️ Operational Concerns**")
-                        for item in radar_obj["concerns"]: st.error(item)
-                    if radar_obj.get("signals"):
+                        for item in concerns: st.error(item)
+                    
+                    # Positive signals for high performing officers
+                    signals = [off.get("name") for off in struct.get("officer_risks", []) 
+                               if "Improving" in off.get("status", "")]
+                    if signals:
                         st.markdown("**✅ Positive Signals**")
-                        for item in radar_obj["signals"]: st.success(item)
+                        for item in signals: st.success(item)
 
-    # --- 🚨 Weekly Recovery Intelligence Report Section ---
-    if len(selected_branches) == 1 and "All" not in selected_branches:
-        branch_name = selected_branches[0]
+        # --- 🚨 Weekly Recovery Intelligence Report Section ---
         st.subheader("🚨 Weekly Recovery Intelligence Report")
-        
-        # Determine current week start (Monday) for cache keying to support weekly resets
-        now = pd.Timestamp.now().normalize()
-        monday_date = (now - pd.Timedelta(days=now.weekday())).strftime('%Y-%m-%d')
-        cache_key = f"{branch_name}_{monday_date}"
 
         col_ai1, col_ai2 = st.columns(2)
         with col_ai1:
-            if st.button("🚀 Generate Weekly Report (Gemini AI)", use_container_width=True):
-                if cache_key not in st.session_state["weekly_reports_cache"]:
-                    with st.spinner(f"📡 Accessing Recovery Command for {branch_name}..."):
-                        st.session_state["weekly_reports_cache"][cache_key] = generate_weekly_report(branch_name, df_display, return_structured=True)
-                else:
-                    st.toast("Report retrieved from local cache.")
-        
-        report_data = st.session_state["weekly_reports_cache"].get(cache_key)
-        report_text = report_data.get("report_text", "") if isinstance(report_data, dict) else (report_data or "")
+            if st.button("🚀 Generate Weekly Report (Recovery Engine)", use_container_width=True):
+                with st.spinner(f"📡 Accessing Recovery Command for {branch_name}..."):
+                    try:
+                        # NEW RECOVERY ENGINE INTEGRATION - Local Import for safety
+                        from src.recovery_engine.builder import build_weekly_recovery_report
+                        report_result = build_weekly_recovery_report(branch_name, df_display, df)
+                        st.session_state["weekly_reports_cache"][cache_key] = report_result
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Recovery Engine Error: {str(e)}")
 
         with col_ai2:
-            if report_text:
+            if report_result:
                 if st.button("♻️ Regenerate Report", use_container_width=True):
                     with st.spinner("Refreshing intelligence..."):
-                        st.session_state["weekly_reports_cache"][cache_key] = generate_weekly_report(branch_name, df_display, return_structured=True)
+                        # NEW RECOVERY ENGINE INTEGRATION - Local Import for safety
+                        from src.recovery_engine.builder import build_weekly_recovery_report
+                        st.session_state["weekly_reports_cache"][cache_key] = build_weekly_recovery_report(branch_name, df_display, df)
                         st.rerun()
 
-        if report_text:
+        # NEW RECOVERY ENGINE INTEGRATION - Rendering & Diagnostics
+        if report_result:
+            # Markdown formatted output for high-quality dashboard display
+            st.markdown(report_result.get("rendered_report", "### ⚠️ Report Rendering Unavailable"))
+            
+            # Preservation of WhatsApp Copy functionality
             st.text_area(
                 label="Field Communication (WhatsApp Copy)",
-                value=report_text,
-                height=600,
+                value=report_result.get("structured_report", {}).get("whatsapp_summary", "No summary generated."),
+                height=400,
                 key="recovery_report_text"
             )
+            
+            # Metadata and Diagnostics for system transparency
+            with st.expander("🛠️ Intelligence Diagnostics & Validation"):
+                meta = report_result.get("metadata", {})
+                d_col1, d_col2 = st.columns(2)
+                with d_col1:
+                    st.write(f"**Generation Time:** {meta.get('generation_time', 'N/A')}")
+                    st.write(f"**Validation Status:** {'✅ Passed' if meta.get('validation_status') else '❌ Failed'}")
+                    st.write(f"**AI Mode:** {meta.get('ai_status', 'N/A')}")
+                with d_col2:
+                    st.write(f"**Processing Duration:** {meta.get('processing_duration_seconds', 0):.4f}s")
+                    st.write(f"**Cache Status:** Active (Data-State Matched)")
+                    st.write(f"**Engine Version:** {meta.get('engine_version', 'N/A')}")
+                
+                if report_result.get("validation_errors"):
+                    st.error(f"Validation Issues: {', '.join(report_result['validation_errors'])}")
 
     # Footer Section - Branding Divider & Caption
     st.markdown("---")

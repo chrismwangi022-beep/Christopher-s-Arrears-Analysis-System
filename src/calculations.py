@@ -704,17 +704,29 @@ def get_standard_metrics_package(df_display: pd.DataFrame, df_full: pd.DataFrame
     Centralized aggregation logic to bundle metrics for AI interpretation.
     Enforces 'math-only' rule for calculations.py.
     """
+    # Initialize Safe Default State
+    safe_metrics = {
+        "total_arrears": 0.0,
+        "total_portfolio": 0.0,
+        "accounts_in_arrears": 0,
+        "average_days_past_due": 0.0,
+        "par_percentage": 0.0,
+        "risk_metrics": {"par_percentage": 0.0, "avg_days_past_due": 0.0, "exposure_amount": 0.0},
+        "officer_summary": {},
+        "branch_risk_summary": [],
+        "recent_trend": {}
+    }
+
     if df_display.empty:
-        return {}
+        return safe_metrics
 
     arrears_col = find_column_case_insensitive(df_display, 'Arrears') or 'Arrears'
     days_col = find_column_case_insensitive(df_display, 'Days') or 'Days'
     principle_col = find_column_case_insensitive(df_display, 'Principle')
     total_balance_col = find_column_case_insensitive(df_display, 'TotalBalance')
     id_col = find_column_case_insensitive(df_display, 'AccountID')
-
-    # Deduplicate for snapshot accuracy
-    calc_df = df_display.drop_duplicates(subset=[id_col]) if id_col else df_display
+    officer_col = find_column_case_insensitive(df_display, 'Loan_Officer') or 'Loan_Officer'
+    branch_col = find_column_case_insensitive(df_display, 'Branch') or 'Branch'
 
     total_arrears = df_display[arrears_col].sum()
     
@@ -729,19 +741,16 @@ def get_standard_metrics_package(df_display: pd.DataFrame, df_full: pd.DataFrame
     avg_days = df_display[df_display[days_col].notna() & (df_display[days_col] > 0)][days_col].mean() or 0
     par_percentage = calculate_par_percentage(df_display)
 
-    # Raw metrics only - Let agents interpret thresholds
+    # 1. Base Risk Metrics
     risk_metrics = {
         "par_percentage": round(float(par_percentage), 2),
         "avg_days_past_due": round(float(avg_days), 1),
         "exposure_amount": round(float(total_arrears), 2)
     }
 
-    # Summaries
-    officer_col = find_column_case_insensitive(df_display, 'Loan_Officer') or 'Loan_Officer'
-    branch_col = find_column_case_insensitive(df_display, 'Branch') or 'Branch'
     date_col = find_column_case_insensitive(df_full, 'Report_Date')
 
-    # Comprehensive Branch Risk Summary (All Branches)
+    # 2. Comprehensive Branch Risk Summary
     portfolio_col = principle_col if principle_col else total_balance_col
     if branch_col and arrears_col and portfolio_col:
         # Aggregate main metrics
@@ -785,9 +794,22 @@ def get_standard_metrics_package(df_display: pd.DataFrame, df_full: pd.DataFrame
     else:
         branch_risk_summary = []
 
-    officer_summary = df_display.groupby(officer_col)[arrears_col].sum().sort_values(ascending=False).head(10).to_dict()
+    # 3. Enhanced Officer Summary (Rich data for RECOVERY_MANAGER agent)
+    try:
+        off_stats = df_display.groupby(officer_col).agg({
+            arrears_col: 'sum',
+            days_col: 'mean',
+            branch_col: 'first'
+        }).dropna().sort_values(arrears_col, ascending=False).head(10)
+        
+        officer_summary = {
+            str(idx): {"Arrears": float(row[arrears_col]), "Avg_Days": float(row[days_col]), "Branch": str(row[branch_col])}
+            for idx, row in off_stats.iterrows()
+        }
+    except Exception:
+        officer_summary = {}
 
-    # Trend (using report date if available)
+    # 4. Recent Trend
     recent_trend = {}
     date_col = find_column_case_insensitive(df_full, 'Report_Date')
     if date_col:
