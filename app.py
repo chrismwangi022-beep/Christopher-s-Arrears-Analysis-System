@@ -116,6 +116,38 @@ st.markdown("""
         line-height: 1.1 !important;
     }
     h2 { margin-top: 0.6rem !important; margin-bottom: 0.4rem !important; font-size: 1.4rem !important; }
+
+    /* Custom App Header Styling */
+    .custom-app-header {
+        display: flex;
+        align-items: center; /* Vertically center items */
+        gap: 12px; /* Space between logo and title */
+        padding: 0 !important; /* Remove default padding */
+        margin: 0 !important; /* Remove default margin */
+        height: 65px; /* Set a fixed height for the header container to match logo */
+        line-height: 1 !important; /* Prevent extra space from line-height */
+        /* Ensure no vertical whitespace above or below the header itself */
+        margin-top: 0 !important;
+        margin-bottom: 0 !important;
+    }
+
+    .custom-app-header img {
+        height: 65px; /* Explicitly set logo height */
+        width: auto; /* Maintain aspect ratio */
+        margin: 0 !important; /* Remove default image margins */
+        padding: 0 !important; /* Remove default image paddings */
+        display: block; /* Remove extra space below image */
+    }
+
+    .custom-app-header .app-title {
+        font-size: 4rem !important; /* Significantly larger, closely matching 65px logo height */
+        font-weight: 800 !important; /* Bold for prominence */
+        line-height: 1 !important; /* Crucial for vertical centering with flexbox */
+        margin: 0 !important; /* Remove default h1 margins */
+        padding: 0 !important; /* Remove default h1 paddings */
+        color: #FFFFFF; /* Assuming title should be white based on sidebar headers */
+        letter-spacing: -0.03em !important; /* Preserve subtle letter spacing */
+    }
     hr { 
         margin-top: 0.35rem !important; 
         margin-bottom: 0.35rem !important; 
