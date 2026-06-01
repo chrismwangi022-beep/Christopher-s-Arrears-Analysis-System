@@ -8,11 +8,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 from src.ai_config import AI_MODEL_NAME
 
-try:
-    import google.generativeai as genai
-    HAS_GOOGLE_AI = True
-except ImportError:
-    HAS_GOOGLE_AI = False
+HAS_GOOGLE_AI = False
 
 # Fallback for Streamlit environment
 import streamlit as st
@@ -90,10 +86,8 @@ def verify_gemini_setup() -> dict:
     if api_key:
         report["api_key_found"] = True
         try:
-            genai.configure(api_key=api_key)
-            model = genai.GenerativeModel(AI_MODEL_NAME)
-            # Lightweight check for model initialization
-            report["model_accessible"] = True
+            # LEGACY SDK REMOVED: Configuration and Model instantiation cleared.
+            report["model_accessible"] = False
         except Exception as e:
             report["error"] = str(e)
     
@@ -296,8 +290,8 @@ def generate_weekly_narrative(summary: dict) -> str:
         return "SYSTEM ERROR: Gemini API Key not configured."
 
     try:
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel(AI_MODEL_NAME)
+        # LEGACY SDK REMOVED: Placeholder set for new SDK initialization.
+        model = None
 
         # Prepare officer metrics for analysis
         all_officers = summary['worst_officers'] + summary['best_officers']
