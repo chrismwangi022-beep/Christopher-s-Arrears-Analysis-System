@@ -125,35 +125,6 @@ st.markdown("""
         line-height: 1.1 !important;
     }
     h2 { margin-top: 0.6rem !important; margin-bottom: 0.4rem !important; font-size: 1.4rem !important; }
-
-    /* Refactored App Header for Pixel-Perfect Alignment */
-    .custom-app-header {
-        display: flex !important;
-        align-items: center !important; /* Sit on exact same vertical centerline */
-        justify-content: flex-start !important;
-        gap: 16px !important; /* Optimized gap for visual breathing room */
-        padding: 0 !important;
-        margin: 0 !important;
-        height: 65px !important; /* Fixed height matching logo exactly */
-        line-height: 1 !important;
-    }
-
-    .custom-app-header img {
-        height: 65px !important;
-        width: auto !important;
-        flex-shrink: 0 !important;
-        display: block !important;
-    }
-
-    .custom-app-header .app-title {
-        font-size: 4.1rem !important; /* Large, prominent size matching logo height */
-        font-weight: 800 !important;
-        line-height: 1 !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        color: #FFFFFF !important;
-        letter-spacing: -0.03em !important;
-    }
     hr { 
         margin-top: 0.35rem !important; 
         margin-bottom: 0.35rem !important; 
@@ -426,15 +397,11 @@ def main():
     st.sidebar.image("assets/developer_branding.png", width=170)
 
     # Main Page Header Branding - Minimalist Layout
-    # Refactored to use custom HTML/CSS for pixel-perfect vertical alignment
-    st.markdown(
-        f"""
-        <div class="custom-app-header">
-            <img src="assets/sc_logo_header.png">
-            <h1 class="app-title">Spread Capital Arrears Analysis System</h1>
-        </div>
-        """, unsafe_allow_html=True
-    )
+    col_h1, col_h2 = st.columns([0.6, 9.4])
+    with col_h1:
+        st.image("assets/sc_logo_header.png", width=65)
+    with col_h2:
+        st.title("Spread Capital Arrears Analysis System")
     st.markdown("---")
 
     # Load data
