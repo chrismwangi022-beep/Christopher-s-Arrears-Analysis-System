@@ -126,37 +126,33 @@ st.markdown("""
     }
     h2 { margin-top: 0.6rem !important; margin-bottom: 0.4rem !important; font-size: 1.4rem !important; }
 
-    /* Custom App Header Styling */
+    /* Refactored App Header for Pixel-Perfect Alignment */
     .custom-app-header {
-        display: flex;
-        align-items: center; /* Vertically center items */
-        justify-content: flex-start; /* Align items to the start of the flex container */
-        gap: 12px; /* Space between logo and title */
-        padding: 0 !important; /* Remove default padding */
-        margin: 0 !important; /* Remove default margin */
-        height: 65px; /* Set a fixed height for the header container to match logo */
-        line-height: 1 !important; /* Prevent extra space from line-height */
-        /* Ensure no vertical whitespace above or below the header itself */
-        margin-top: 0 !important;
-        margin-bottom: 0 !important;
+        display: flex !important;
+        align-items: center !important; /* Sit on exact same vertical centerline */
+        justify-content: flex-start !important;
+        gap: 16px !important; /* Optimized gap for visual breathing room */
+        padding: 0 !important;
+        margin: 0 !important;
+        height: 65px !important; /* Fixed height matching logo exactly */
+        line-height: 1 !important;
     }
 
     .custom-app-header img {
-        height: 65px; /* Explicitly set logo height */
-        width: auto; /* Maintain aspect ratio */
-        margin: 0 !important; /* Remove default image margins */
-        padding: 0 !important; /* Remove default image paddings */
-        display: block; /* Remove extra space below image */
+        height: 65px !important;
+        width: auto !important;
+        flex-shrink: 0 !important;
+        display: block !important;
     }
 
     .custom-app-header .app-title {
-        font-size: 4rem !important; /* Significantly larger, closely matching 65px logo height */
-        font-weight: 800 !important; /* Bold for prominence */
-        line-height: 1 !important; /* Crucial for vertical centering with flexbox */
-        margin: 0 !important; /* Remove default h1 margins */
-        padding: 0 !important; /* Remove default h1 paddings */
-        color: #FFFFFF; /* Assuming title should be white based on sidebar headers */
-        letter-spacing: -0.03em !important; /* Preserve subtle letter spacing */
+        font-size: 4.1rem !important; /* Large, prominent size matching logo height */
+        font-weight: 800 !important;
+        line-height: 1 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        color: #FFFFFF !important;
+        letter-spacing: -0.03em !important;
     }
     hr { 
         margin-top: 0.35rem !important; 
