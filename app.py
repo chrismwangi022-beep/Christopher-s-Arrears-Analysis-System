@@ -399,6 +399,7 @@ def main():
     # Main Page Header Branding - Minimalist Layout
     col_h1, col_h2 = st.columns([0.6, 9.4])
     with col_h1:
+        st.markdown('<div style="margin-top: 8px;"></div>', unsafe_allow_html=True)
         st.image("assets/sc_logo_header.png", width=65)
     with col_h2:
         st.title("Spread Capital Arrears Analysis System")
