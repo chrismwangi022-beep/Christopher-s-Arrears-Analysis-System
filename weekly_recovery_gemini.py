@@ -6,12 +6,17 @@ Standalone Gemini AI Agent
 import os
 import pandas as pd
 from datetime import datetime, timedelta
+from src.ai_config import AI_MODEL_NAME
 
+<<<<<<< HEAD
 try:
     from google import genai
     HAS_GENAI = True
 except ImportError:
     HAS_GENAI = False
+=======
+HAS_GOOGLE_AI = False
+>>>>>>> 43c476bf187f2cde058b5db75fbd115ccf330814
 
 # Fallback for Streamlit environment
 import streamlit as st
@@ -90,9 +95,8 @@ def verify_gemini_setup() -> dict:
     if api_key:
         report["api_key_found"] = True
         try:
-            client = genai.Client(api_key=api_key)
-            # Lightweight check for model initialization
-            report["model_accessible"] = True
+            # LEGACY SDK REMOVED: Configuration and Model instantiation cleared.
+            report["model_accessible"] = False
         except Exception as e:
             report["error"] = str(e)
     
@@ -294,7 +298,21 @@ def generate_weekly_narrative(summary: dict) -> str:
     for m in all_officers:
         officer_data_prompt += f"Officer: {m['name']} | Arrears: KSh {m['arr']:,.0f} | Recovery: KSh {m['rec']:,.0f} | DPD: {m['dpd']:.1f} | Status: {m['status']}\n"
 
+<<<<<<< HEAD
     prompt = f"""
+=======
+    try:
+        # LEGACY SDK REMOVED: Placeholder set for new SDK initialization.
+        model = None
+
+        # Prepare officer metrics for analysis
+        all_officers = summary['worst_officers'] + summary['best_officers']
+        officer_data_prompt = ""
+        for m in all_officers:
+            officer_data_prompt += f"Officer: {m['name']} | Arrears: KSh {m['arr']:,.0f} | Recovery: KSh {m['rec']:,.0f} | DPD: {m['dpd']:.1f} | Status: {m['status']}\n"
+
+        prompt = f"""
+>>>>>>> 43c476bf187f2cde058b5db75fbd115ccf330814
 You are a Credit Risk Reporting Engine for a regulated microfinance institution.
 
 STRICT OUTPUT RULE:
@@ -380,7 +398,20 @@ Positive Signals:
 - No partial officer entries allowed
 - Output must be complete and consistent
 """
+<<<<<<< HEAD
     return generate_gemini_response(prompt)
+=======
+        config = {
+            "temperature": 0.4,
+            "max_output_tokens": 2200
+        }
+
+        response = model.generate_content(prompt, generation_config=config, request_options={"timeout": 40})
+        return response.text.strip()
+
+    except Exception as e:
+        return f"Gemini Narrative Error: {str(e)}"
+>>>>>>> 43c476bf187f2cde058b5db75fbd115ccf330814
 
 def parse_radar_intelligence(report_text: str) -> dict:
     """
