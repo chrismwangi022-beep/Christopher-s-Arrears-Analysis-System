@@ -8,15 +8,11 @@ import pandas as pd
 from datetime import datetime, timedelta
 from src.ai_config import AI_MODEL_NAME
 
-<<<<<<< HEAD
 try:
     from google import genai
     HAS_GENAI = True
 except ImportError:
     HAS_GENAI = False
-=======
-HAS_GOOGLE_AI = False
->>>>>>> 43c476bf187f2cde058b5db75fbd115ccf330814
 
 # Fallback for Streamlit environment
 import streamlit as st
@@ -298,21 +294,7 @@ def generate_weekly_narrative(summary: dict) -> str:
     for m in all_officers:
         officer_data_prompt += f"Officer: {m['name']} | Arrears: KSh {m['arr']:,.0f} | Recovery: KSh {m['rec']:,.0f} | DPD: {m['dpd']:.1f} | Status: {m['status']}\n"
 
-<<<<<<< HEAD
     prompt = f"""
-=======
-    try:
-        # LEGACY SDK REMOVED: Placeholder set for new SDK initialization.
-        model = None
-
-        # Prepare officer metrics for analysis
-        all_officers = summary['worst_officers'] + summary['best_officers']
-        officer_data_prompt = ""
-        for m in all_officers:
-            officer_data_prompt += f"Officer: {m['name']} | Arrears: KSh {m['arr']:,.0f} | Recovery: KSh {m['rec']:,.0f} | DPD: {m['dpd']:.1f} | Status: {m['status']}\n"
-
-        prompt = f"""
->>>>>>> 43c476bf187f2cde058b5db75fbd115ccf330814
 You are a Credit Risk Reporting Engine for a regulated microfinance institution.
 
 STRICT OUTPUT RULE:
@@ -398,20 +380,7 @@ Positive Signals:
 - No partial officer entries allowed
 - Output must be complete and consistent
 """
-<<<<<<< HEAD
     return generate_gemini_response(prompt)
-=======
-        config = {
-            "temperature": 0.4,
-            "max_output_tokens": 2200
-        }
-
-        response = model.generate_content(prompt, generation_config=config, request_options={"timeout": 40})
-        return response.text.strip()
-
-    except Exception as e:
-        return f"Gemini Narrative Error: {str(e)}"
->>>>>>> 43c476bf187f2cde058b5db75fbd115ccf330814
 
 def parse_radar_intelligence(report_text: str) -> dict:
     """
@@ -470,41 +439,7 @@ def generate_weekly_report(branch_name: str, df: pd.DataFrame, return_structured
     1. STAGE 1 — SUMMARY ENGINE (Pandas)
     2. STAGE 2 — NARRATIVE ENGINE (Gemini)
     """
-    # 1. Load historical snapshots to provide true weekly movement context
-    snapshot_file = "historical_branch_snapshots.csv"
-    branch_df = pd.DataFrame()
-    
-    if os.path.exists(snapshot_file):
-        try:
-            hist_df = pd.read_csv(snapshot_file)
-            # Ensure the Date column is parsed as datetime objects for valid week filtering
-            hist_df['Date'] = pd.to_datetime(hist_df['Date'], errors='coerce')
-            hist_df = hist_df.rename(columns={'Date': 'Report_Date', 'Total_Arrears': 'Arrears'})
-            branch_df = hist_df[hist_df['Branch'] == branch_name].copy()
-        except Exception as e:
-            print(f"ERROR: Failed to load snapshot file for {branch_name}: {e}")
-    
-    # FALLBACK: Only use the provided dashboard dataframe if the snapshot file is missing or empty.
-    # This prevents sidebar date filters from incorrectly restricting the AI's weekly movement analysis.
-    if branch_df.empty and not df.empty:
-        branch_df = df[df['Branch'] == branch_name].copy()
-        if 'Date' in branch_df.columns and 'Report_Date' not in branch_df.columns:
-            branch_df = branch_df.rename(columns={'Date': 'Report_Date'})
-
-    if branch_df.empty:
-        return f"SKIP: No records identified for branch '{branch_name}'."
-
-    # Stage 1: Summary Engine
-    summary = build_weekly_summary(branch_name, branch_df)
-    
-    # Stage 2: Narrative Engine
-    report_text = generate_weekly_narrative(summary)
-    
+    summary = build_weekly_summary(branch_name, df)
     if return_structured:
-        return {
-            "report_text": report_text,
-            "radar": parse_radar_intelligence(report_text),
-            "metadata": summary
-        }
-        
-    return report_text
+        return summary
+    return generate_weekly_narrative(summary)
