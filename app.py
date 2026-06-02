@@ -507,7 +507,7 @@ def main():
     with st.sidebar.expander("Service Intelligence Logs"):
         st.caption(f"**Current Model:** `{ai_health['model']}`")
         st.caption(f"**Last Sync:** {ai_health['last_success']}")
-        st.caption(f"**Processing:** {'Deterministic (Local)' if ai_health['is_local'] else 'Probabilistic (Gemini)'}")
+        st.caption(f"**Processing:** {'Deterministic (Local)' if ai_health['is_local'] else 'Gemini (Google AI)'}")
         if ai_health["error"]:
             st.caption(f"**Issue:** :red[{ai_health['error']}]")
         if st.button("🔄 Refresh AI Status", use_container_width=True):
@@ -1203,7 +1203,7 @@ def main():
                 with st.spinner(f"📡 Accessing Recovery Command for {branch_name}..."):
                     try:
                         # NEW RECOVERY ENGINE INTEGRATION - Local Import for safety
-                        from src.recovery_engine.builder import build_weekly_recovery_report
+                        from src.builder import build_weekly_recovery_report
                         report_result = build_weekly_recovery_report(branch_name, df_display, df)
                         st.session_state["weekly_reports_cache"][cache_key] = report_result
                         st.rerun()

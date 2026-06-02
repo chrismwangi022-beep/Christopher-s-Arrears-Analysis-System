@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import time
 import random
+import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
 from typing import Any
@@ -27,10 +28,11 @@ import streamlit as st
 # Safe Import Guard for Google Gemini SDK
 try:
     from google import genai
-    from google.genai import types
     HAS_GENAI = True
 except ImportError:
     HAS_GENAI = False
+
+from .gemini_client import generate_gemini_response
 
 from .ai_agents import (
     RISK_ANALYST_SYSTEM_PROMPT,
@@ -43,11 +45,6 @@ from .ai_agents import (
 # ─────────────────────────────────────────────
 # MODEL CONFIG
 # ─────────────────────────────────────────────
-
-MODEL_NAME = "gemini-1.5-flash"
-ORCHESTRATOR_DIRECTIVE = "Interpret the provided JSON data according to your analytical persona. Provide the structured executive summary now."
-MAX_RETRIES = 2
-INITIAL_BACKOFF = 2  # seconds
 
 SYSTEM_PROMPT = """
 You are a senior microfinance risk analyst.
@@ -170,35 +167,10 @@ def _execute_agent_call(data: dict, system_prompt: str) -> str:
     """
     Unified production runner for all AI agents with model fallback and exponential backoff.
     """
-    if not HAS_GENAI:
-        return "⚠️ Google GenAI library missing from requirements.txt."
-
-    if "ai_client" not in st.session_state:
-        api_key = st.secrets.get("GEMINI_API_KEY")
-        if not api_key or "REPLACE_WITH" in str(api_key):
-            return "⚠️ Missing GEMINI_API_KEY configuration."
-            
-        try:
-            st.session_state.ai_client = genai.Client(api_key=api_key)
-        except Exception as e:
-            return f"⚠️ API Initialization Error: {str(e)}"
-
     metrics_json = format_metrics(data)
-
-    try:
-        response = st.session_state.ai_client.models.generate_content(
-            model=MODEL_NAME,
-            contents=f"DATA:\n{metrics_json}",
-            config=types.GenerateContentConfig(
-                system_instruction=system_prompt,
-                temperature=0.3,
-                max_output_tokens=700,
-            )
-        )
-        return response.text.strip() if response.text else ""
-    except Exception as e:
-        return f"🛡️ AI Service Temporarily Busy: {str(e)}"
-
+    # Combine system persona and data context for the unified Gemini client
+    full_prompt = f"{system_prompt}\n\nDATA TO ANALYZE:\n{metrics_json}"
+    return generate_gemini_response(full_prompt)
 
 def run_multi_agent_analysis(data: dict[str, Any]) -> dict[str, str]:
     """
@@ -296,7 +268,7 @@ def get_ai_health_state() -> dict[str, Any]:
             "status": "Online" if is_functional else "Offline",
             "is_local": not is_functional,
             "last_success": "N/A",
-            "model": "Gemini 1.5 Flash (Google)" if is_functional else "Deterministic Engine",
+            "model": "Gemini 2.5 Flash (Production)" if is_functional else "Deterministic Engine",
             "error": "" if is_functional else ("Library missing" if not HAS_GENAI else "Invalid/Placeholder API Key")
         }
     return st.session_state.ai_health
@@ -316,7 +288,7 @@ def generate_ai_insights(metrics: dict[str, Any]) -> dict[str, str]:
         results = run_multi_agent_analysis(metrics)
 
         # Append the Gemini footer to the executive summary
-        footer = f"\n\n---\n📈 AI Analytics Engine · Google Gemini · Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+        footer = f"\n\n---\n📈 AI Analytics Engine · Gemini 2.5 Flash · Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
         if "executive_summary" in results and not results["executive_summary"].startswith(("⚠️", "🛡️")):
             results["executive_summary"] += footer
         
@@ -402,26 +374,5 @@ def _execute_recovery_manager_call(data: dict) -> str:
     if not HAS_GENAI or not st.secrets.get("GEMINI_API_KEY"):
         return f"🚨 [LOCAL FALLBACK] Recovery Report for {data['branch']}: Week movement is {data['net_movement']:,.0f}. Immediate field action required."
 
-    if "ai_client" not in st.session_state:
-        api_key = st.secrets.get("GEMINI_API_KEY")
-        if not api_key:
-            return "⚠️ Missing API Key"
-            
-        try:
-            st.session_state.ai_client = genai.Client(api_key=api_key)
-        except:
-            return "⚠️ Connection Error"
-
-    try:
-        response = st.session_state.ai_client.models.generate_content(
-            model=MODEL_NAME,
-            contents=f"WEEKLY METRICS:\n{json.dumps(data, indent=2)}",
-            config=types.GenerateContentConfig(
-                system_instruction=RECOVERY_MANAGER_PROMPT,
-                temperature=0.5,
-                max_output_tokens=1000,
-            )
-        )
-        return response.text.strip() if response.text else ""
-    except Exception as e:
-        return f"🛡️ Recovery AI Busy: {str(e)}"
+    prompt = f"{RECOVERY_MANAGER_PROMPT}\n\nWEEKLY METRICS:\n{json.dumps(data, indent=2)}"
+    return generate_gemini_response(prompt)

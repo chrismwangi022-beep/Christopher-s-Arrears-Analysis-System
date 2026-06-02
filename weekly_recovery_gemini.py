@@ -9,13 +9,13 @@ from datetime import datetime, timedelta
 
 try:
     from google import genai
-    from google.genai import types
     HAS_GENAI = True
 except ImportError:
     HAS_GENAI = False
 
 # Fallback for Streamlit environment
 import streamlit as st
+from src.gemini_client import generate_gemini_response
 
 def update_historical_snapshots(df: pd.DataFrame):
     """
@@ -76,14 +76,14 @@ def verify_gemini_setup() -> dict:
     Returns a status report for connectivity and model accessibility.
     """
     report = {
-        "library_installed": HAS_GOOGLE_AI,
+        "library_installed": HAS_GENAI,
         "api_key_found": False,
         "model_accessible": False,
         "error": None
     }
 
-    if not HAS_GOOGLE_AI:
-        report["error"] = "google-generativeai library not found. Run: pip install google-generativeai"
+    if not HAS_GENAI:
+        report["error"] = "google-genai library not found. Run: pip install google-genai"
         return report
 
     api_key = st.secrets.get("GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
@@ -288,22 +288,13 @@ def generate_weekly_narrative(summary: dict) -> str:
     Uses Gemini AI to generate a professional WhatsApp-ready report from computed summary.
     No calculations performed here.
     """
-    # The summary will always be a dictionary now, even if activity is low.
-    # The check for `if not summary:` is no longer needed here.
-    api_key = st.secrets.get("GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        return "SYSTEM ERROR: Gemini API Key not configured."
+    # Prepare officer metrics for analysis
+    all_officers = summary['worst_officers'] + summary['best_officers']
+    officer_data_prompt = ""
+    for m in all_officers:
+        officer_data_prompt += f"Officer: {m['name']} | Arrears: KSh {m['arr']:,.0f} | Recovery: KSh {m['rec']:,.0f} | DPD: {m['dpd']:.1f} | Status: {m['status']}\n"
 
-    try:
-        client = genai.Client(api_key=api_key)
-
-        # Prepare officer metrics for analysis
-        all_officers = summary['worst_officers'] + summary['best_officers']
-        officer_data_prompt = ""
-        for m in all_officers:
-            officer_data_prompt += f"Officer: {m['name']} | Arrears: KSh {m['arr']:,.0f} | Recovery: KSh {m['rec']:,.0f} | DPD: {m['dpd']:.1f} | Status: {m['status']}\n"
-
-        prompt = f"""
+    prompt = f"""
 You are a Credit Risk Reporting Engine for a regulated microfinance institution.
 
 STRICT OUTPUT RULE:
@@ -389,18 +380,7 @@ Positive Signals:
 - No partial officer entries allowed
 - Output must be complete and consistent
 """
-        response = client.models.generate_content(
-            model="gemini-1.5-flash",
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                temperature=0.4,
-                max_output_tokens=2200,
-            )
-        )
-        return response.text.strip() if response.text else ""
-
-    except Exception as e:
-        return f"Gemini Narrative Error: {str(e)}"
+    return generate_gemini_response(prompt)
 
 def parse_radar_intelligence(report_text: str) -> dict:
     """
