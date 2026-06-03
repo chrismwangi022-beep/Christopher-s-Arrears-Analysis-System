@@ -19,6 +19,7 @@ import io
 import tempfile
 import hashlib
 import stat
+import time
 
 try:
     import git
@@ -31,7 +32,7 @@ ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
-from src.data_loader import load_all_data
+from src.data_loader import load_all_data, process_uploaded_file
 from src.calculations import (
     calculate_par_percentage,
     get_top_risk_branch,
@@ -79,6 +80,19 @@ def get_secret(key, default=None):
         return st.secrets.get(key, default)
     except Exception:
         return default
+
+# --- Performance Logging Helper ---
+class PerformanceTimer:
+    """Context manager to measure and log execution time of blocks."""
+    def __init__(self, name="Operation"):
+        self.name = name
+    def __enter__(self):
+        self.start = time.perf_counter()
+        return self
+    def __exit__(self, type, value, traceback):
+        self.end = time.perf_counter()
+        duration = self.end - self.start
+        print(f"PERF: {self.name} took {duration:.4f} seconds")
 
 # Custom CSS for Spread Capital branding
 st.markdown("""
@@ -384,14 +398,23 @@ st.markdown("""
 if 'data_loaded' not in st.session_state:
     st.session_state.data_loaded = False
     st.session_state.df = pd.DataFrame()
+    st.session_state.last_updated = None
 
 # Load data
-@st.cache_data
+@st.cache_data(show_spinner=False)
 def load_data():
     """Load and cache data."""
-    return load_all_data()
+    with PerformanceTimer("Initial Disk Load"):
+        return load_all_data()
 
 # Main app
+def get_app_data():
+    if not st.session_state.data_loaded:
+        df = load_data()
+        st.session_state.df = df
+        st.session_state.data_loaded = True
+    return st.session_state.df
+
 def main():
     # New Branding Implementation: Image at the very top of the sidebar
     st.sidebar.image("assets/developer_branding.png", width=170)
@@ -406,11 +429,13 @@ def main():
     st.markdown("---")
 
     # Load data
-    with st.spinner("Loading data..."):
-        df = load_data()
-        update_historical_snapshots(df)
-        st.session_state.df = df
-        st.session_state.data_loaded = True
+    if not st.session_state.data_loaded:
+        with st.spinner("Initializing System..."):
+            df = get_app_data()
+            with PerformanceTimer("Historical Snapshot Update"):
+                update_historical_snapshots(df)
+    else:
+        df = st.session_state.df
     
     if df.empty:
         st.error("No data loaded. Please check the data folder path.")
@@ -558,7 +583,7 @@ def main():
                 saved_count = 0
                 skipped_count = 0
                 errors = []
-                saved_file_paths = []
+                new_data_frames = []
                 
                 for uploaded_file in uploaded_files:
                     destination_path = os.path.join(DATA_FOLDER, uploaded_file.name)
@@ -568,14 +593,24 @@ def main():
                         continue
 
                     try:
+                        # Process file for immediate session update
+                        new_df = process_uploaded_file(uploaded_file)
+                        if not new_df.empty:
+                            new_data_frames.append(new_df)
+                            
                         with open(destination_path, "wb") as f:
                             f.write(uploaded_file.getvalue())
                         saved_count += 1
-                        saved_file_paths.append(destination_path)
                     except Exception as e:
                         errors.append(f"{uploaded_file.name}: {e}")
                 
                 if saved_count > 0:
+                    # Optimized: Update session state incrementally instead of full reload
+                    if new_data_frames:
+                        all_new = pd.concat(new_data_frames, ignore_index=True)
+                        st.session_state.df = pd.concat([st.session_state.df, all_new], ignore_index=True)
+                        update_historical_snapshots(all_new) # Only update snapshots with new delta
+
                     # --- GIT PUSH LOGIC ---
                     git_success_message = None
                     git_error_message = None
@@ -655,14 +690,13 @@ def main():
                                     try: os.unlink(askpass_path)
                                     except: pass
 
-                    # Combine messages and rerun
+                    # Combine messages
                     local_save_msg = f"✅ Saved {saved_count} files locally."
                     git_msg = git_success_message or git_error_message
                     final_msg = f"{local_save_msg} | {git_msg}" if git_msg else local_save_msg
-                    st.session_state.upload_success = final_msg
-                    st.toast("Reloading all data...")
-                    st.cache_data.clear()
-                    st.rerun()
+                    st.sidebar.success(final_msg)
+                    st.toast("Portfolio Updated Successfully")
+                    # No st.rerun() or cache clear needed as we updated st.session_state.df
                 
                 elif skipped_count > 0:
                     st.sidebar.warning(f"Skipped {skipped_count} files (Overwrite not selected).")
@@ -682,8 +716,9 @@ def main():
     
     col1, col2, col3, col4, col5 = st.columns(5)
     
-    # Enforce Architectural Rule: Move all KPI math to src/calculations.py
-    metrics = get_standard_metrics_package(df_display, df)
+    with PerformanceTimer("KPI Metrics Calculation"):
+        # Enforce Architectural Rule: Move all KPI math to src/calculations.py
+        metrics = get_standard_metrics_package(df_display, df)
     
     # Debug Logs for Production Monitoring (Visibility in Streamlit Cloud logs)
     print(f"DEBUG: Data Context - Display: {len(df_display)} rows, Full: {len(df)} rows")
