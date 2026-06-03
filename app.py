@@ -651,20 +651,30 @@ def main():
                                 git_env = os.environ.copy()
                                 git_env["GIT_ASKPASS"] = askpass_path
                                 git_env["GIT_TERMINAL_PROMPT"] = "0"
-                                os.environ["GIT_ASKPASS"] = "" # Disable system-level askpass
 
                                 # Set user identity for the automated commit
                                 with repo.config_writer() as cw:
                                     cw.set_value("user", "name", "Spread Capital Admin")
                                     cw.set_value("user", "email", "admin@spreadcapital.com")
 
+                                # 1. Stage changes
+                                st.info("Staging changes...")
+                                repo.git.add(A=True)
+                                
+                                # 2. Commit changes if dirty
+                                if repo.is_dirty(untracked_files=True):
+                                    st.info("Committing changes...")
+                                    repo.index.commit(f"Auto-upload via Web Portal {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                                else:
+                                    st.info("No new changes to commit locally.")
+
+                                # 3. Pull latest from GitHub
+                                st.info("Pulling latest from GitHub...")
                                 # Reconcile divergent branches using authenticated environment
                                 repo.git.pull('origin', 'main', rebase=True, X='theirs', env=git_env)
 
-                                # 3. Add and Commit files
-                                repo.index.add(["data/"])
-                                repo.index.commit("Daily Arrears Update via Web Portal")
-
+                                # 4. Push to GitHub
+                                st.info("Pushing to GitHub...")
                                 # Push to GitHub using authenticated environment
                                 repo.git.push('origin', 'HEAD:main', env=git_env)
 
