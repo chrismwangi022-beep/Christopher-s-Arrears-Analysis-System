@@ -52,6 +52,61 @@ Generate concise portfolio insights, branch analysis, officer flags, and recomme
 Keep executive style. No storytelling.
 """
 
+def build_ai_context(df_filtered: pd.DataFrame, top_n: int = 10) -> dict[str, Any]:
+    """
+    Redesigns the AI input pipeline to provide structured portfolio intelligence.
+    Aggregates essential segments while providing row-level visibility into outliers.
+    """
+    if df_filtered.empty:
+        return {}
+
+    # 1. Row-Level Data Sampling (Lightweight "Texture")
+    # We select essential columns and sample to avoid token bloat
+    essential_cols = ['Branch', 'Product', 'Loan_Officer', 'Days', 'Arrears', 'Aging_Bucket']
+    cols_present = [c for c in essential_cols if c in df_filtered.columns]
+    
+    # Take a representative sample (Top 15 by Arrears + 15 random for variety)
+    top_rows = df_filtered.nlargest(15, 'Arrears')[cols_present]
+    random_rows = df_filtered.sample(n=min(len(df_filtered), 15))[cols_present]
+    sample_data = pd.concat([top_rows, random_rows]).drop_duplicates().to_dict(orient='records')
+
+    # 2. Segmented Breakdowns
+    branch_breakdown = df_filtered.groupby('Branch')['Arrears'].sum().sort_values(ascending=False).to_dict()
+    product_breakdown = df_filtered.groupby('Product')['Arrears'].sum().sort_values(ascending=False).to_dict()
+    
+    # 3. Aging Distribution
+    aging_dist = df_filtered.groupby('Aging_Bucket').agg({
+        'Arrears': 'sum',
+        'AccountID': 'count'
+    }).rename(columns={'AccountID': 'Count'}).to_dict(orient='index')
+
+    # 4. Top Risky Outliers (High Exposure Accounts)
+    top_risky = df_filtered.nlargest(top_n, 'Arrears')[cols_present].to_dict(orient='records')
+
+    # 5. Officer Performance Summary
+    officer_perf = df_filtered.groupby('Loan_Officer').agg({
+        'Arrears': 'sum',
+        'Days': 'mean'
+    }).sort_values('Arrears', ascending=False).head(5).to_dict(orient='index')
+
+    context = {
+        "metadata": {
+            "total_records_processed": len(df_filtered),
+            "currency": "KES",
+            "analysis_timestamp": datetime.now().strftime("%Y-%m-%d %H:%M")
+        },
+        "portfolio_segments": {
+            "by_branch": branch_breakdown,
+            "by_product": product_breakdown,
+            "aging_distribution": aging_dist
+        },
+        "high_risk_outliers": top_risky,
+        "officer_performance_top_5": officer_perf,
+        "data_samples": sample_data
+    }
+
+    return _clean_metrics(context)
+
 def generate_local_insights(metrics: dict[str, Any]) -> dict[str, str]:
     """
     Deterministic rule-based engine that mimics AI output style.
