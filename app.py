@@ -1036,10 +1036,7 @@ def main():
     cols_to_show = [c for c in cols_to_show if c in worklist_df.columns]
     
     # Separate tabs for different action types
-    @st.fragment
-    def render_worklist_section(worklist_df):
-        tab_call, tab_visit, tab_recovery = st.tabs(["Call Backs", "Visits", "Recovery"])
-        # ... tab rendering logic ...
+    tab_call, tab_visit, tab_recovery = st.tabs(["Call Backs", "Visits", "Recovery"])
     
     def render_worklist_tab(df_tab, label_prefix: str):
         """Render table + CSV/Excel export buttons for a given worklist slice."""
