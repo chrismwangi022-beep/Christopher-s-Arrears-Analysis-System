@@ -235,15 +235,16 @@ def generate_local_insights(metrics: dict[str, Any]) -> dict[str, str]:
 def _execute_agent_call(data: dict, system_prompt: str) -> str:
     """
     Unified production runner for all AI agents with model fallback and exponential backoff.
+    Each call is treated as an independent session to prevent context cross-contamination.
     """
     metrics_json = format_metrics(data)
-    # Combine system persona and data context for the unified Gemini client
-    full_prompt = f"{system_prompt}\n\nDATA TO ANALYZE:\n{metrics_json}"
+    full_prompt = f"{system_prompt}\n\n### FINANCIAL DATASET (JSON):\n{metrics_json}"
     return generate_gemini_response(full_prompt)
 
 def run_multi_agent_analysis(data: dict[str, Any]) -> dict[str, str]:
     """
-    Orchestrates specialized interpreters.
+    Orchestrates specialized interpreters. Ensures each agent's response is 
+    self-contained and avoids repeating metrics available in other tabs.
     """
     return {
         "executive_summary": _execute_agent_call(data, RISK_ANALYST_SYSTEM_PROMPT),
