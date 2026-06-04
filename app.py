@@ -639,38 +639,31 @@ def main():
                     if not HAS_GIT:
                         git_error_message = "❌ GitPython library not installed. Please run 'pip install GitPython'."
                     else:
-                        # 1. Securely fetch the token
                         token = get_secret("GITHUB_TOKEN")
                         if not token:
                             git_error_message = "❌ GITHUB_TOKEN not found in Streamlit Secrets."
                         else:
-                            askpass_path = ""
                             try:
-                                # Use the current working directory as the repo path
                                 repo_path = os.path.dirname(os.path.abspath(__file__))
                                 repo = git.Repo(repo_path)
 
-                                # 2. Setup Clean Remote URL & Authentication
-                                # Remove tokens from URL to prevent leakage in process lists or git config
+                                # 2. Setup Authenticated Remote URL (Fixes HTTP 403 Permission Denied)
                                 base_url = "github.com/chrismwangi022-beep/Christopher-s-Arrears-Analysis-System.git"
-                                clean_url = f"https://{base_url}"
+                                auth_url = f"https://x-access-token:{token}@{base_url}"
                                 
+                                # Safe Debug Logging (Requirement 4 & 5)
+                                try:
+                                    git_user = repo.config_reader().get_value("user", "name", "Not Set")
+                                except: git_user = "Unknown"
+                                
+                                st.info(f"🔍 DEBUG: Token Present: {bool(token)} | Length: {len(token) if token else 0} | User: {git_user}")
+                                st.info(f"🔍 DEBUG: Target: https://x-access-token:***@{base_url}")
+
                                 origin = repo.remote(name='origin')
-                                origin.set_url(clean_url)
+                                origin.set_url(auth_url)
                                 
-                                # Create a temporary ASKPASS script to handle authentication securely.
-                                # This is the production-grade way to pass tokens to Git in headless environments.
-                                with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.sh') as f:
-                                    # Token is used as the password; username is provided via the script as well
-                                    f.write(f"#!/bin/sh\necho '{token}'\n")
-                                    askpass_path = f.name
-                                
-                                # Make the script executable
-                                os.chmod(askpass_path, os.stat(askpass_path).st_mode | stat.S_IEXEC)
-                                
-                                # Prepare environment for git commands
+                                # Prepare environment
                                 git_env = os.environ.copy()
-                                git_env["GIT_ASKPASS"] = askpass_path
                                 git_env["GIT_TERMINAL_PROMPT"] = "0"
 
                                 # Set user identity for the automated commit
@@ -678,23 +671,17 @@ def main():
                                     cw.set_value("user", "name", "Spread Capital Admin")
                                     cw.set_value("user", "email", "admin@spreadcapital.com")
 
-                                # 1. Lightweight Fetch & Connectivity Check
-                                # Updates remote-tracking branches without touching local working tree
+                                # 1. Fetch & Push via Authenticated URL
                                 st.info("Verifying remote connectivity...")
                                 origin.fetch(env=git_env)
-
-                                # 2. Stage changes
+                                
                                 st.info("Staging changes...")
                                 repo.git.add(A=True)
                                 
-                                # 3. Commit changes if dirty
                                 if repo.is_dirty(untracked_files=True):
                                     st.info("Committing changes...")
                                     repo.index.commit(f"Auto-upload via Web Portal {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-                                else:
-                                    st.info("No new changes to commit locally.")
-
-                                # 4. Push to GitHub
+                                
                                 st.info("Pushing to GitHub...")
                                 repo.git.push('origin', 'HEAD:main', env=git_env)
 
@@ -715,10 +702,7 @@ def main():
                                 err_msg = str(e).replace(str(token), "********")
                                 git_error_message = f"🔥 Git Error: {err_msg}"
                             finally:
-                                # Clean up the sensitive ASKPASS file
-                                if askpass_path and os.path.exists(askpass_path):
-                                    try: os.unlink(askpass_path)
-                                    except: pass
+                                pass
 
                     # Combine messages
                     local_save_msg = f"✅ Saved {saved_count} files locally."
