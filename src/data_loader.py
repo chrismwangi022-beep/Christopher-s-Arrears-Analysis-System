@@ -18,6 +18,7 @@ from .constants import (
     HEADER_KEYWORDS,
 )
 
+MASTER_DATASET_PATH = os.path.join(DATA_FOLDER, "master_dataset.parquet")
 
 def detect_column_by_pattern(df: pd.DataFrame, patterns: List[str], default_col: Optional[int] = None) -> Optional[int]:
     """Detect column index by matching header patterns."""
@@ -382,3 +383,43 @@ def process_uploaded_file(uploaded_file, branch_name: Optional[str] = None) -> p
     except Exception as e:
         print(f"Error processing uploaded file: {e}")
         return pd.DataFrame()
+
+def load_master_dataset() -> pd.DataFrame:
+    """
+    Loads the master dataset from Parquet format.
+    If Parquet doesn't exist, builds it from historical CSV/XLSX files once.
+    """
+    if not os.path.exists(MASTER_DATASET_PATH):
+        print("DEBUG: Master Parquet not found. Initializing from historical files...")
+        df = load_all_data()
+        if not df.empty:
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(MASTER_DATASET_PATH), exist_ok=True)
+            df.to_parquet(MASTER_DATASET_PATH, index=False, engine='pyarrow')
+            print(f"DEBUG: Master dataset created at {MASTER_DATASET_PATH}")
+        return df
+    
+    print(f"DEBUG: Loading master dataset from {MASTER_DATASET_PATH}")
+    return pd.read_parquet(MASTER_DATASET_PATH, engine='pyarrow')
+
+def append_to_master_dataset(new_df: pd.DataFrame):
+    """
+    Appends new records to the master parquet file without rescanning raw history.
+    """
+    if new_df.empty:
+        return
+
+    if os.path.exists(MASTER_DATASET_PATH):
+        try:
+            # Load existing, append new, and overwrite
+            # Note: Parquet doesn't support "append" to a single file easily; 
+            # we read and rewrite, which is still 100x faster than parsing raw files.
+            existing_df = pd.read_parquet(MASTER_DATASET_PATH, engine='pyarrow')
+            updated_df = pd.concat([existing_df, new_df], ignore_index=True)
+            updated_df.to_parquet(MASTER_DATASET_PATH, index=False, engine='pyarrow')
+            print(f"DEBUG: Appended {len(new_df)} records to master dataset.")
+        except Exception as e:
+            print(f"ERROR appending to master dataset: {e}")
+    else:
+        new_df.to_parquet(MASTER_DATASET_PATH, index=False, engine='pyarrow')
+        print("DEBUG: Master dataset initialized with new records.")

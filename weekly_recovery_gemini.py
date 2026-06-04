@@ -23,7 +23,7 @@ def update_historical_snapshots(df: pd.DataFrame):
     Builds and updates a daily historical snapshot CSV for branch-level metrics.
     Ensures persistent tracking of arrears movement over time for AI analysis.
     """
-    snapshot_file = "historical_branch_snapshots.csv"
+    snapshot_file = "historical_branch_snapshots.parquet"
     
     # Check for mandatory columns
     required = {'Branch', 'Arrears', 'Report_Date'}
@@ -59,17 +59,13 @@ def update_historical_snapshots(df: pd.DataFrame):
     # 2. Persist to CSV (Append or Update)
     if os.path.exists(snapshot_file):
         try:
-            hist_df = pd.read_csv(snapshot_file)
-            hist_df['Date'] = hist_df['Date'].astype(str)
-            summary['Date'] = summary['Date'].astype(str)
-            
-            # Combine and remove duplicates (latest data for a date/branch combo wins)
+            hist_df = pd.read_parquet(snapshot_file)
             combined = pd.concat([hist_df, summary]).drop_duplicates(subset=['Date', 'Branch', 'Loan_Officer'], keep='last')
-            combined.to_csv(snapshot_file, index=False)
+            combined.to_parquet(snapshot_file, index=False)
         except Exception:
-            summary.to_csv(snapshot_file, index=False)
+            summary.to_parquet(snapshot_file, index=False)
     else:
-        summary.to_csv(snapshot_file, index=False)
+        summary.to_parquet(snapshot_file, index=False)
 
 def verify_gemini_setup() -> dict:
     """

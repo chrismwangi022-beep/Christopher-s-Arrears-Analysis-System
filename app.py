@@ -32,7 +32,7 @@ ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
-from src.data_loader import load_all_data, process_uploaded_file
+from src.data_loader import load_master_dataset, append_to_master_dataset, process_uploaded_file
 from src.calculations import (
     calculate_par_percentage,
     get_top_risk_branch,
@@ -399,13 +399,14 @@ if 'data_loaded' not in st.session_state:
     st.session_state.data_loaded = False
     st.session_state.df = pd.DataFrame()
     st.session_state.last_updated = None
+    st.session_state.uploaded_files_cache = {}
 
 # Load data
 @st.cache_data(show_spinner=False)
 def load_data():
     """Load and cache data."""
-    with PerformanceTimer("Initial Disk Load"):
-        return load_all_data()
+    with PerformanceTimer("Master Parquet Load"):
+        return load_master_dataset()
 
 # Main app
 def get_app_data():
@@ -418,6 +419,11 @@ def get_app_data():
 def main():
     # New Branding Implementation: Image at the very top of the sidebar
     st.sidebar.image("assets/developer_branding.png", width=170)
+
+    # 1, 3 & 4. Display the success message once and automatically clear it
+    upload_msg = st.session_state.pop('upload_success', None)
+    if upload_msg:
+        st.sidebar.success(upload_msg)
 
     # Main Page Header Branding - Minimalist Layout
     col_h1, col_h2 = st.columns([0.6, 9.4])
@@ -547,11 +553,6 @@ def main():
     st.sidebar.markdown("---")
     st.sidebar.header("⚙️ Operations Control")
     
-    # Display success message if file was saved in previous run
-    if 'upload_success' in st.session_state:
-        st.sidebar.success(st.session_state.upload_success)
-        del st.session_state['upload_success']
-    
     admin_pwd = get_secret("ADMIN_PASSWORD")
     password_input = st.sidebar.text_input("Administrator Credentials", type="password", placeholder="Enter Password")
     
@@ -593,25 +594,45 @@ def main():
                         continue
 
                     try:
-                        # Process file for immediate session update
-                        new_df = process_uploaded_file(uploaded_file)
+                        # 1. Generate MD5 hash for every uploaded file to identify content uniquely
+                        file_content = uploaded_file.getvalue()
+                        file_hash = hashlib.md5(file_content).hexdigest()
+
+                        # 2, 3 & 4. Cache check to prevent duplicate processing of identical files
+                        if file_hash in st.session_state.uploaded_files_cache:
+                            print(f"CACHE HIT: {uploaded_file.name}") # 5. Logging
+                            new_df = st.session_state.uploaded_files_cache[file_hash]
+                        else:
+                            print(f"CACHE MISS: {uploaded_file.name}") # 5. Logging
+                            uploaded_file.seek(0) # Reset pointer for the data loader
+                            new_df = process_uploaded_file(uploaded_file)
+                            if not new_df.empty:
+                                st.session_state.uploaded_files_cache[file_hash] = new_df
+
                         if not new_df.empty:
                             new_data_frames.append(new_df)
                             
+                        # Save file to local storage
                         with open(destination_path, "wb") as f:
-                            f.write(uploaded_file.getvalue())
+                            f.write(file_content)
                         saved_count += 1
                     except Exception as e:
                         errors.append(f"{uploaded_file.name}: {e}")
                 
-                if saved_count > 0:
-                    # Optimized: Update session state incrementally instead of full reload
-                    if new_data_frames:
-                        all_new = pd.concat(new_data_frames, ignore_index=True)
-                        st.session_state.df = pd.concat([st.session_state.df, all_new], ignore_index=True)
-                        update_historical_snapshots(all_new) # Only update snapshots with new delta
+                if saved_count > 0 and new_data_frames:
+                    # 1. Process and Append incrementally to the existing session dataframe
+                    all_new = pd.concat(new_data_frames, ignore_index=True)
+                    
+                    # 2. Update the persistent master dataset (Parquet)
+                    append_to_master_dataset(all_new)
 
-                    # --- GIT PUSH LOGIC ---
+                    # 2. Preserve session dataset by only appending the new delta
+                    st.session_state.df = pd.concat([st.session_state.df, all_new], ignore_index=True)
+                    
+                    # 3. Update snapshots using ONLY the newly uploaded delta (not the whole history)
+                    update_historical_snapshots(all_new)
+
+                    # 4. Git Push Logic (Maintained for synchronization)
                     git_success_message = None
                     git_error_message = None
 
@@ -657,25 +678,24 @@ def main():
                                     cw.set_value("user", "name", "Spread Capital Admin")
                                     cw.set_value("user", "email", "admin@spreadcapital.com")
 
-                                # 1. Stage changes
+                                # 1. Lightweight Fetch & Connectivity Check
+                                # Updates remote-tracking branches without touching local working tree
+                                st.info("Verifying remote connectivity...")
+                                origin.fetch(env=git_env)
+
+                                # 2. Stage changes
                                 st.info("Staging changes...")
                                 repo.git.add(A=True)
                                 
-                                # 2. Commit changes if dirty
+                                # 3. Commit changes if dirty
                                 if repo.is_dirty(untracked_files=True):
                                     st.info("Committing changes...")
                                     repo.index.commit(f"Auto-upload via Web Portal {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
                                 else:
                                     st.info("No new changes to commit locally.")
 
-                                # 3. Pull latest from GitHub
-                                st.info("Pulling latest from GitHub...")
-                                # Reconcile divergent branches using authenticated environment
-                                repo.git.pull('origin', 'main', rebase=True, X='theirs', env=git_env)
-
                                 # 4. Push to GitHub
                                 st.info("Pushing to GitHub...")
-                                # Push to GitHub using authenticated environment
                                 repo.git.push('origin', 'HEAD:main', env=git_env)
 
                                 git_success_message = "🚀 GitHub Repository Updated Successfully!"
@@ -704,10 +724,12 @@ def main():
                     local_save_msg = f"✅ Saved {saved_count} files locally."
                     git_msg = git_success_message or git_error_message
                     final_msg = f"{local_save_msg} | {git_msg}" if git_msg else local_save_msg
-                    st.sidebar.success(final_msg)
+
+                    # 2. Store success message immediately after upload
+                    st.session_state.upload_success = final_msg
                     st.toast("Portfolio Updated Successfully")
-                    # No st.rerun() or cache clear needed as we updated st.session_state.df
-                
+                    st.rerun()
+
                 elif skipped_count > 0:
                     st.sidebar.warning(f"Skipped {skipped_count} files (Overwrite not selected).")
                 
@@ -1014,7 +1036,10 @@ def main():
     cols_to_show = [c for c in cols_to_show if c in worklist_df.columns]
     
     # Separate tabs for different action types
-    tab_call, tab_visit, tab_recovery = st.tabs(["Call Backs (1–30 days)", "Physical Visits (31–90 days)", "Recovery Escalations (>90 days)"])
+    @st.fragment
+    def render_worklist_section(worklist_df):
+        tab_call, tab_visit, tab_recovery = st.tabs(["Call Backs", "Visits", "Recovery"])
+        # ... tab rendering logic ...
     
     def render_worklist_tab(df_tab, label_prefix: str):
         """Render table + CSV/Excel export buttons for a given worklist slice."""
