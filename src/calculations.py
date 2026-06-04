@@ -316,11 +316,17 @@ def get_branch_performance(df: pd.DataFrame) -> pd.DataFrame:
     p_col = find_column_case_insensitive(df, 'Principle') or 'Principle'
     
     try:
-        perf = df.groupby(b_col).agg({a_col: 'sum', p_col: 'sum'}).reset_index()
+        # Normalize branch names to prevent case-sensitive duplication
+        df_clean = df.copy()
+        df_clean[b_col] = df_clean[b_col].astype(str).str.strip().str.upper()
+
+        perf = df_clean.groupby(b_col).agg({a_col: 'sum', p_col: 'sum'}).reset_index()
         perf.columns = ['Branch', 'Arrears', 'Principal']
         perf['Risk_Ratio'] = perf.apply(lambda x: _safe_divide(x['Arrears'], x['Principal']), axis=1)
         perf['Classification'] = perf['Risk_Ratio'].apply(classify_risk_ratio)
-        return perf.sort_values('Risk_Ratio', ascending=False).reset_index(drop=True)
+
+        # Sort strictly by Risk_Ratio descending (High Risk to Low Risk)
+        return perf.sort_values(by='Risk_Ratio', ascending=False).reset_index(drop=True)
     except Exception:
         return pd.DataFrame()
 
@@ -356,11 +362,18 @@ def get_officer_performance(df: pd.DataFrame) -> pd.DataFrame:
     p_col = find_column_case_insensitive(df, 'Principle') or 'Principle'
 
     try:
-        perf = df.groupby([b_col, o_col]).agg({a_col: 'sum', p_col: 'sum'}).reset_index()
+        # Normalize to ensure consistent grouping
+        df_clean = df.copy()
+        df_clean[b_col] = df_clean[b_col].astype(str).str.strip().str.upper()
+        df_clean[o_col] = df_clean[o_col].astype(str).str.strip().str.upper()
+
+        perf = df_clean.groupby([b_col, o_col]).agg({a_col: 'sum', p_col: 'sum'}).reset_index()
         perf.columns = ['Branch', 'Officer', 'Arrears', 'Principal']
         perf['Risk_Ratio'] = perf.apply(lambda x: _safe_divide(x['Arrears'], x['Principal']), axis=1)
         perf['Classification'] = perf['Risk_Ratio'].apply(classify_risk_ratio)
-        return perf.sort_values('Risk_Ratio', ascending=False).reset_index(drop=True)
+
+        # Sort strictly by Risk_Ratio descending
+        return perf.sort_values(by='Risk_Ratio', ascending=False).reset_index(drop=True)
     except Exception:
         return pd.DataFrame()
 

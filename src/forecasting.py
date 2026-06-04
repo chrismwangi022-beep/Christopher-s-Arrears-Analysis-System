@@ -111,10 +111,14 @@ def forecast_arrears_30d(df: pd.DataFrame) -> Dict[str, Any]:
     # 6. Rolling Growth Rates
     growth_7d = (daily_ts.iloc[-1] - daily_ts.iloc[-7]) if len(daily_ts) >= 7 else 0
 
+    # 7. Growth Rate Percentage (30-day Outlook)
+    growth_rate_pct = ((predicted_val - current_val) / current_val * 100) if current_val > 0 else 0
+
     return {
         "current_arrears": float(current_val),
         "predicted_arrears_30d": float(predicted_val),
         "expected_change": float(predicted_val - current_val),
+        "growth_rate_pct": round(float(growth_rate_pct), 2),
         "trend": trend,
         "momentum": momentum,
         "confidence_score": round(float(max(0, min(1, r_squared))), 2),

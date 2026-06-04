@@ -1116,8 +1116,10 @@ def main():
             st.markdown("#### 🔴 Highest Risk Branches (Relative Ranking)")
             st.dataframe(branch_perf.head(5), use_container_width=True, column_config=table_config, hide_index=True)
             
-            st.markdown("#### 🟢 Lowest Risk Branch (Relative Ranking)")
-            st.dataframe(branch_perf.tail(5).sort_values('Risk_Ratio', ascending=True), use_container_width=True, column_config=table_config, hide_index=True)
+            # Requirement 4: Validation check for multiple branches
+            if len(branch_perf) > 1:
+                st.markdown("#### 🟢 Lowest Risk Branch (Relative Ranking)")
+                st.dataframe(branch_perf.tail(5).sort_values('Risk_Ratio', ascending=True), use_container_width=True, column_config=table_config, hide_index=True)
             
             with st.expander("View Full Branch League Table"):
                 st.dataframe(branch_perf, use_container_width=True, column_config=table_config, hide_index=True)
@@ -1128,8 +1130,10 @@ def main():
             st.markdown("#### 🔴 Highest Risk Officers (Relative Ranking)")
             st.dataframe(officer_perf.head(5), use_container_width=True, column_config=table_config, hide_index=True)
             
-            st.markdown("#### 🟢 Lowest Risk Officers (Relative Ranking)")
-            st.dataframe(officer_perf.tail(5).sort_values('Risk_Ratio', ascending=True), use_container_width=True, column_config=table_config, hide_index=True)
+            # Requirement 4: Validation check for multiple officers
+            if len(officer_perf) > 1:
+                st.markdown("#### 🟢 Lowest Risk Officers (Relative Ranking)")
+                st.dataframe(officer_perf.tail(5).sort_values('Risk_Ratio', ascending=True), use_container_width=True, column_config=table_config, hide_index=True)
 
             with st.expander("View Full Officer League Table"):
                 st.dataframe(officer_perf, use_container_width=True, column_config=table_config, hide_index=True)
