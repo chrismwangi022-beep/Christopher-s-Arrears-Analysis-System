@@ -34,8 +34,8 @@ def generate_gemini_response(prompt: str) -> str:
             model="gemini-2.5-flash",
             contents=prompt,
             config=types.GenerateContentConfig(
-                temperature=0.7,
-                max_output_tokens=1024,
+                temperature=0.2, # Lower temperature for strict financial accuracy
+                max_output_tokens=2048, # Increased to prevent mid-analysis truncation
             )
         )
 

@@ -711,6 +711,8 @@ def get_standard_metrics_package(df_display: pd.DataFrame, df_full: pd.DataFrame
         "accounts_in_arrears": 0,
         "average_days_past_due": 0.0,
         "par_percentage": 0.0,
+        "aging_distribution": {},
+        "product_risk_profile": [],
         "risk_metrics": {"par_percentage": 0.0, "avg_days_past_due": 0.0, "exposure_amount": 0.0},
         "officer_summary": {},
         "branch_risk_summary": [],
@@ -727,6 +729,7 @@ def get_standard_metrics_package(df_display: pd.DataFrame, df_full: pd.DataFrame
     id_col = find_column_case_insensitive(df_display, 'AccountID')
     officer_col = find_column_case_insensitive(df_display, 'Loan_Officer') or 'Loan_Officer'
     branch_col = find_column_case_insensitive(df_display, 'Branch') or 'Branch'
+    product_col = find_column_case_insensitive(df_display, 'Product') or 'Product'
 
     total_arrears = df_display[arrears_col].sum()
     
@@ -740,6 +743,15 @@ def get_standard_metrics_package(df_display: pd.DataFrame, df_full: pd.DataFrame
     accounts_in_arrears = len(df_display[df_display[days_col].notna() & (df_display[days_col] > 0)])
     avg_days = df_display[df_display[days_col].notna() & (df_display[days_col] > 0)][days_col].mean() or 0
     par_percentage = calculate_par_percentage(df_display)
+
+    # 0. Distributional Visibility
+    aging_dist = df_display.groupby('Aging_Bucket')[arrears_col].sum().to_dict()
+    
+    # Product segmentation for cross-analysis
+    prod_perf = df_display.groupby(product_col).agg({
+        arrears_col: 'sum',
+        days_col: 'mean'
+    }).reset_index().to_dict(orient='records')
 
     # 1. Base Risk Metrics
     risk_metrics = {
@@ -826,6 +838,8 @@ def get_standard_metrics_package(df_display: pd.DataFrame, df_full: pd.DataFrame
         "accounts_in_arrears": int(accounts_in_arrears),
         "average_days_past_due": round(float(avg_days), 1),
         "par_percentage": round(float(par_percentage), 2),
+        "aging_distribution": aging_dist,
+        "product_risk_profile": prod_perf,
         "risk_metrics": risk_metrics,
         "officer_summary": officer_summary,
         "branch_risk_summary": branch_risk_summary,
