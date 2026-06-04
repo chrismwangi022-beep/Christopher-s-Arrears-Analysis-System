@@ -1,16 +1,17 @@
 """
 Spread Capital Limited — Predictive Arrears Forecasting
-Lightweight Trend-Based Regression Engine
+Enhanced Analytics & Multi-Window Forecasting Engine
 """
 
 import pandas as pd
 import numpy as np
 from datetime import timedelta
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Tuple
 
 def forecast_arrears_30d(df: pd.DataFrame) -> Dict[str, Any]:
     """
-    Predicts arrears exposure for the next 30 days using linear regression.
+    Predicts arrears exposure for the next 30 days using a hybrid approach 
+    of EWMA smoothing and linear regression.
     
     Args:
         df: Dataframe with 'Report_Date' and 'Arrears'
@@ -23,7 +24,10 @@ def forecast_arrears_30d(df: pd.DataFrame) -> Dict[str, Any]:
             "predicted_arrears_30d": 0.0,
             "trend": "Stable",
             "confidence_score": 0.0,
-            "growth_rate": 0.0
+            "volatility_score": 0.0,
+            "ma_7d": 0.0,
+            "ma_30d": 0.0,
+            "momentum": "Neutral"
         }
 
     # 1. Prepare Time Series
@@ -35,24 +39,38 @@ def forecast_arrears_30d(df: pd.DataFrame) -> Dict[str, Any]:
     all_dates = pd.date_range(start=daily_ts.index.min(), end=daily_ts.index.max(), freq='D')
     daily_ts = daily_ts.reindex(all_dates, fill_value=0)
     
+    # Feature Engineering: Moving Averages
+    ma_7 = daily_ts.rolling(window=7, min_periods=1).mean()
+    ma_14 = daily_ts.rolling(window=14, min_periods=1).mean()
+    ma_30 = daily_ts.rolling(window=30, min_periods=1).mean()
+    
+    # Exponential Weighting (Alpha 0.3 favors recent 3-5 days significantly)
+    ewma = daily_ts.ewm(alpha=0.3, adjust=False).mean()
+    
     # We only care about the last 30-45 days to establish a "current" trend
     window_size = min(len(daily_ts), 45)
-    recent_data = daily_ts.tail(window_size)
+    # Use smoothed EWMA data for regression to reduce outlier impact
+    y = ewma.tail(window_size).values
     
-    if len(recent_data) < 3:
+    if len(y) < 3:
         return {
             "predicted_arrears_30d": float(daily_ts.iloc[-1]) if not daily_ts.empty else 0.0,
             "trend": "Insufficient Data",
             "confidence_score": 0.0,
-            "growth_rate": 0.0
+            "volatility_score": 0.0,
+            "ma_7d": float(ma_7.iloc[-1]),
+            "ma_30d": float(ma_30.iloc[-1]),
+            "momentum": "Neutral"
         }
 
     # 2. Linear Regression (y = mx + b)
-    y = recent_data.values
     x = np.arange(len(y))
     
     # Fit line: slope (m) and intercept (b)
-    m, b = np.polyfit(x, y, 1)
+    try:
+        m, b = np.polyfit(x, y, 1)
+    except np.RankWarning:
+        m, b = 0.0, y[-1]
     
     # Calculate R-Squared for confidence
     reconstructed_y = m * x + b
@@ -60,6 +78,11 @@ def forecast_arrears_30d(df: pd.DataFrame) -> Dict[str, Any]:
     ss_res = np.sum(residuals**2)
     ss_tot = np.sum((y - np.mean(y))**2)
     r_squared = 1 - (ss_res / ss_tot) if ss_tot != 0 else 0
+    
+    # Volatility Score (Stability Indicator)
+    # Higher residuals relative to mean = Higher instability
+    mean_val = np.mean(y) if np.mean(y) != 0 else 1
+    volatility = (np.std(residuals) / mean_val)
 
     # 3. Project 30 Days Ahead
     # We project from the current day (index len(y)-1) to 30 days out
@@ -79,8 +102,13 @@ def forecast_arrears_30d(df: pd.DataFrame) -> Dict[str, Any]:
         trend = "Downward ↓"
     else:
         trend = "Stable →"
+        
+    # 5. Momentum Detection (Acceleration)
+    # Compare 7-day velocity to overall 30-day velocity
+    short_m = (y[-1] - y[-7]) / 7 if len(y) >= 7 else m
+    momentum = "Accelerating ⚡" if short_m > m * 1.2 else "Decelerating 📉" if short_m < m * 0.8 else "Steady"
 
-    # 5. Rolling Growth Rates (Check for acceleration)
+    # 6. Rolling Growth Rates
     growth_7d = (daily_ts.iloc[-1] - daily_ts.iloc[-7]) if len(daily_ts) >= 7 else 0
 
     return {
@@ -88,7 +116,11 @@ def forecast_arrears_30d(df: pd.DataFrame) -> Dict[str, Any]:
         "predicted_arrears_30d": float(predicted_val),
         "expected_change": float(predicted_val - current_val),
         "trend": trend,
-        "confidence_score": round(max(0, min(1, r_squared)), 2),
+        "momentum": momentum,
+        "confidence_score": round(float(max(0, min(1, r_squared))), 2),
+        "volatility_score": round(float(volatility), 3),
+        "ma_7d": float(ma_7.iloc[-1]),
+        "ma_30d": float(ma_30.iloc[-1]),
         "daily_velocity": float(m),
         "growth_7d_total": float(growth_7d)
     }

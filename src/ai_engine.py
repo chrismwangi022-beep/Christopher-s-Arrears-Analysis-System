@@ -33,12 +33,14 @@ except ImportError:
     HAS_GENAI = False
 
 from .gemini_client import generate_gemini_response
+from .forecasting import forecast_arrears_30d, get_forecast_by_group
 
 from .ai_agents import (
     RISK_ANALYST_SYSTEM_PROMPT,
     BRANCH_PERFORMANCE_ANALYST_PROMPT,
     RISK_ANALYSIS_AGENT_PROMPT,
     RECOVERY_STRATEGY_AGENT_PROMPT,
+    FORECAST_AGENT_PROMPT,
     RECOVERY_MANAGER_PROMPT,
 )
 
@@ -89,6 +91,9 @@ def build_ai_context(df_filtered: pd.DataFrame, top_n: int = 10) -> dict[str, An
         'Days': 'mean'
     }).sort_values('Arrears', ascending=False).head(5).to_dict(orient='index')
 
+    # 6. Predictive Forecasting Data
+    overall_forecast = forecast_arrears_30d(df_filtered)
+
     context = {
         "metadata": {
             "total_records_processed": len(df_filtered),
@@ -100,6 +105,7 @@ def build_ai_context(df_filtered: pd.DataFrame, top_n: int = 10) -> dict[str, An
             "by_product": product_breakdown,
             "aging_distribution": aging_dist
         },
+        "forecasting_30d": overall_forecast,
         "high_risk_outliers": top_risky,
         "officer_performance_top_5": officer_perf,
         "data_samples": sample_data
@@ -116,6 +122,7 @@ def generate_local_insights(metrics: dict[str, Any]) -> dict[str, str]:
     par_pct = metrics.get("par_percentage", 0)
     accounts = metrics.get("accounts_in_arrears", 0)
     avg_days = metrics.get("average_days_past_due", 0)
+    forecast = metrics.get("forecasting_30d", {})
     branch_risk_list = metrics.get("branch_risk_summary", [])
     officer_summary = metrics.get("officer_summary", {})
 
@@ -200,6 +207,12 @@ def generate_local_insights(metrics: dict[str, Any]) -> dict[str, str]:
     if processed_officers == 0:
         branch_insights += "- No specific officer-level actions flagged for this selection.\n"
 
+    # 5. Forecast Fallback
+    forecast_txt = "🔮 30-Day Outlook (Local)\n"
+    if forecast:
+        forecast_txt += f"- Predicted Exposure: KES {forecast.get('predicted_arrears_30d', 0):,.0f}\n"
+        forecast_txt += f"- Trend: {forecast.get('trend', 'Stable')} | Momentum: {forecast.get('momentum', 'Neutral')}\n"
+
     # 5. Recommendations
     rec = "💡 Recommendations\n"
     if par_pct > 12:
@@ -215,7 +228,8 @@ def generate_local_insights(metrics: dict[str, Any]) -> dict[str, str]:
         "executive_summary": summary,
         "risk": risks.strip(),
         "recovery": rec.strip(),
-        "branch": branch_insights.strip()
+        "branch": branch_insights.strip(),
+        "forecast": forecast_txt.strip()
     }
 
 def _execute_agent_call(data: dict, system_prompt: str) -> str:
@@ -235,7 +249,8 @@ def run_multi_agent_analysis(data: dict[str, Any]) -> dict[str, str]:
         "executive_summary": _execute_agent_call(data, RISK_ANALYST_SYSTEM_PROMPT),
         "risk": _execute_agent_call(data, RISK_ANALYSIS_AGENT_PROMPT),
         "recovery": _execute_agent_call(data, RECOVERY_STRATEGY_AGENT_PROMPT),
-        "branch": _execute_agent_call(data, BRANCH_PERFORMANCE_ANALYST_PROMPT)
+        "branch": _execute_agent_call(data, BRANCH_PERFORMANCE_ANALYST_PROMPT),
+        "forecast": _execute_agent_call(data, FORECAST_AGENT_PROMPT)
     }
 
 # ─────────────────────────────────────────────

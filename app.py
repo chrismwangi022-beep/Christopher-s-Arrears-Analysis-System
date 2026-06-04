@@ -859,9 +859,11 @@ def main():
         if "executive_summary" in ai_results:
             st.markdown(ai_results["executive_summary"])
         
-        tab_risk, tab_rec, tab_branch_ai = st.tabs(["🛡️ Risk AI", "🛠️ Recovery AI", "🏢 Branch AI"])
+        tab_risk, tab_forecast, tab_rec, tab_branch_ai = st.tabs(["🛡️ Risk AI", "🔮 Forecast AI", "🛠️ Recovery AI", "🏢 Branch AI"])
         with tab_risk:
             st.markdown(ai_results.get("risk", "Interpretation pending..."))
+        with tab_forecast:
+            st.markdown(ai_results.get("forecast", "Future projections pending..."))
         with tab_rec:
             st.markdown(ai_results.get("recovery", "Operation strategy pending..."))
         with tab_branch_ai:
