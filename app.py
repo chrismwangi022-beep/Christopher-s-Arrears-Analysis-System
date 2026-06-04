@@ -526,9 +526,9 @@ def main():
     status_label, status_type = status_map.get(ai_health["status"], ("⚪ Initializing", "info"))
     
     # AI Configuration Safety Check
-    openrouter_key = get_secret("OPENROUTER_API_KEY")
-    if not openrouter_key or "REPLACE_WITH" in str(openrouter_key):
-        st.sidebar.warning("⚠️ AI Keys Not Configured")
+    gemini_key = get_secret("GEMINI_API_KEY")
+    if not gemini_key or "REPLACE_WITH" in str(gemini_key):
+        st.sidebar.warning("⚠️ Gemini API Key Not Configured")
         st.sidebar.caption("Please update `.streamlit/secrets.toml` with your real API keys.")
     
     if status_type == "success": 
@@ -830,13 +830,13 @@ def main():
                 st.session_state.ai_results = results
                 
                 # Detection: Check for the specific local mode string in any return value
-                is_local = any("(Local Analysis Mode)" in str(v) for v in results.values())
+                is_local = any("(Local Analysis Mode)" in str(v) for k, v in results.items())
                 
-                if is_local:
+                if is_local and ai_health["status"] != "Offline":
                     ai_health.update({
-                        "status": "Fallback" if "GEMINI_API_KEY" in st.secrets else "Offline",
+                        "status": "Fallback",
                         "is_local": True,
-                        "error": "API Unreachable/Quota Exceeded. Running local logic."
+                        "error": "Last attempt failed. Check API Quotas."
                     })
                 else:
                     ai_health.update({

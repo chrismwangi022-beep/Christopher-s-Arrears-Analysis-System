@@ -357,17 +357,25 @@ def generate_ai_insights(metrics: dict[str, Any]) -> dict[str, str]:
         # Attempt multi-agent AI analysis
         results = run_multi_agent_analysis(metrics)
 
-        # Append the Gemini footer to the executive summary
-        footer = f"\n\n---\n📈 AI Analytics Engine · Gemini 2.5 Flash · Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
-        if "executive_summary" in results and not results["executive_summary"].startswith(("⚠️", "🛡️")):
-            results["executive_summary"] += footer
-        
-        # Detection: If any agent returns an error signature, trigger the fallback engine
-        # to ensure the UI remains clean and consistent.
-        if any(v.startswith(("⚠️", "🛡️")) for v in results.values()):
+        # Requirement 4: Intelligent Partial Fallback
+        # If the core Executive Summary failed, fallback the whole dashboard
+        if results.get("executive_summary", "").startswith(("⚠️", "🛡️")):
             return generate_local_insights(metrics)
-            
-        return results
+
+        # Otherwise, merge local fallbacks only for specific failed sub-agents
+        local_fallback = generate_local_insights(metrics)
+        final_results = {}
+        for key, value in results.items():
+            if value.startswith(("⚠️", "🛡️")):
+                final_results[key] = local_fallback.get(key, value)
+            else:
+                final_results[key] = value
+
+        # Append Gemini footer to successful AI runs
+        footer = f"\n\n---\n📈 AI Analytics Engine · Gemini 2.5 Flash · Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+        final_results["executive_summary"] += footer
+
+        return final_results
         
     except Exception as e:
         print(f"CRITICAL: AI Pipeline Failure: {str(e)}")
