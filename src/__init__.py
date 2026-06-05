@@ -1,3 +1,1 @@
-"""
-Spread Capital Analysis System - Core Package
-"""
+"""Source Package Initialization"""

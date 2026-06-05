@@ -1293,7 +1293,7 @@ def main():
                 if st.button("♻️ Regenerate Report", use_container_width=True):
                     with st.spinner("Refreshing intelligence..."):
                         # NEW RECOVERY ENGINE INTEGRATION - Local Import for safety
-                        from src.recovery_engine.builder import build_weekly_recovery_report
+                        from src.builder import build_weekly_recovery_report
                         st.session_state["weekly_reports_cache"][cache_key] = build_weekly_recovery_report(branch_name, df_display, df)
                         st.rerun()
 
