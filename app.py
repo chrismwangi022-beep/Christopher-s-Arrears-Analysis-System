@@ -438,6 +438,13 @@ def main():
     if not st.session_state.data_loaded:
         with st.spinner("Initializing System..."):
             df = get_app_data()
+            
+            # Pipeline Diagnostics
+            st.write("### 🔍 Data Pipeline Diagnostics")
+            st.write(f"**Total Records Loaded:** {len(df):,}")
+            st.write(f"**Unique Branches Found:** {df['Branch'].nunique()}")
+            st.dataframe(df['Branch'].value_counts().head(20), use_container_width=True)
+
             with PerformanceTimer("Historical Snapshot Update"):
                 update_historical_snapshots(df)
     else:

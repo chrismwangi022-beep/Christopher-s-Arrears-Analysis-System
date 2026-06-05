@@ -389,18 +389,26 @@ def load_master_dataset() -> pd.DataFrame:
     Loads the master dataset from Parquet format.
     If Parquet doesn't exist, builds it from historical CSV/XLSX files using load_all_data().
     """
-    if not os.path.exists(MASTER_DATASET_PATH):
-        print(f"DEBUG: Master Parquet not found at {MASTER_DATASET_PATH}. Initializing from historical files...")
-        df = load_all_data()
-        if not df.empty:
-            # Ensure directory exists
-            os.makedirs(os.path.dirname(MASTER_DATASET_PATH), exist_ok=True)
-            df.to_parquet(MASTER_DATASET_PATH, index=False, engine='pyarrow')
-            print(f"DEBUG: Master dataset initialized and saved to {MASTER_DATASET_PATH}")
-        return df
-    
-    print(f"DEBUG: Loading master dataset from {MASTER_DATASET_PATH}")
-    return pd.read_parquet(MASTER_DATASET_PATH, engine='pyarrow')
+    # Check if parquet exists and is healthy
+    if os.path.exists(MASTER_DATASET_PATH):
+        df = pd.read_parquet(MASTER_DATASET_PATH, engine='pyarrow')
+        
+        # HEURISTIC: Check for incomplete initialization (1 branch vs multiple source files)
+        raw_files = [f for f in os.listdir(DATA_FOLDER) if f.lower().endswith(('.csv', '.xlsx', '.xls'))]
+        if df['Branch'].nunique() <= 1 and len(raw_files) > 1:
+            print("DEBUG: Master Parquet appears incomplete (Single Branch). Rebuilding from source...")
+        else:
+            print(f"DEBUG: Loading existing master dataset from {MASTER_DATASET_PATH}")
+            return df
+
+    # Initial Build or Forced Rebuild
+    print(f"DEBUG: Initializing master dataset from all files in {DATA_FOLDER}...")
+    df = load_all_data()
+    if not df.empty:
+        os.makedirs(os.path.dirname(MASTER_DATASET_PATH), exist_ok=True)
+        df.to_parquet(MASTER_DATASET_PATH, index=False, engine='pyarrow')
+        print(f"DEBUG: Master dataset initialized and saved to {MASTER_DATASET_PATH}")
+    return df
 
 def append_to_master_dataset(new_df: pd.DataFrame):
     """
@@ -415,7 +423,8 @@ def append_to_master_dataset(new_df: pd.DataFrame):
     if os.path.exists(MASTER_DATASET_PATH):
         try:
             existing_df = pd.read_parquet(MASTER_DATASET_PATH, engine='pyarrow')
-            updated_df = pd.concat([existing_df, new_df], ignore_index=True)
+            # Append and enforce integrity by removing potential duplicates
+            updated_df = pd.concat([existing_df, new_df], ignore_index=True).drop_duplicates()
             updated_df.to_parquet(MASTER_DATASET_PATH, index=False, engine='pyarrow')
             print(f"DEBUG: Successfully appended {len(new_df)} records to {MASTER_DATASET_PATH}")
         except Exception as e:
