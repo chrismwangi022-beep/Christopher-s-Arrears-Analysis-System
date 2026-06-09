@@ -62,14 +62,15 @@ def extract_date_from_filename(filename: str) -> Optional[datetime.date]:
 
     Falls back to None if no parseable date is found.
     """
-    # Common date patterns: YYYY-MM-DD, YYYY.MM.DD, DD-MM-YYYY, DD.MM.YYYY, YYYYMMDD
-    patterns = [r"(\d{4}[-\.]\d{2}[-\.]\d{2})", r"(\d{2}[-\.]\d{2}[-\.]\d{4})", r"(\d{8})"]
+    # Updated patterns: support single digit days/months (e.g. 8-5-2024 or 2024.5.8)
+    patterns = [r"(\d{4}[-\.]\d{1,2}[-\.]\d{1,2})", r"(\d{1,2}[-\.]\d{1,2}[-\.]\d{4})", r"(\d{8})"]
     for p in patterns:
         m = re.search(p, filename)
         if m:
             s = m.group(1)
             # Try a range of common formats including dot-separated dates
-            for fmt in ("%Y-%m-%d", "%Y.%m.%d", "%d-%m-%Y", "%d.%m.%Y", "%Y%m%d", "%d%m%Y"):
+            # strptime handles single digits automatically for %d and %m
+            for fmt in ("%Y-%m-%d", "%Y.%m.%d", "%d-%m-%Y", "%d.%m.%Y", "%Y%m%d", "%d%m%Y", "%m-%d-%Y", "%m.%d.%Y"):
                 try:
                     return datetime.strptime(s, fmt).date()
                 except Exception:
@@ -417,7 +418,11 @@ def append_to_master_dataset(new_df: pd.DataFrame):
     if os.path.exists(MASTER_DATASET_PATH):
         try:
             existing_df = pd.read_parquet(MASTER_DATASET_PATH, engine='pyarrow')
-            updated_df = pd.concat([existing_df, new_df], ignore_index=True)
+            # Combine and deduplicate to prevent doubling on repeated uploads
+            updated_df = pd.concat([existing_df, new_df], ignore_index=True).drop_duplicates(
+                subset=['Branch', 'AccountID', 'MemberName', 'Report_Date'], 
+                keep='last'
+            )
             updated_df.to_parquet(MASTER_DATASET_PATH, index=False, engine='pyarrow')
             print(f"DEBUG: Successfully appended {len(new_df)} records to {MASTER_DATASET_PATH}")
         except Exception as e:

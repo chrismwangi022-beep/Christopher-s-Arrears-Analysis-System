@@ -627,7 +627,11 @@ def main():
                     append_to_master_dataset(all_new)
 
                     # 2. Preserve session dataset by only appending the new delta
-                    st.session_state.df = pd.concat([st.session_state.df, all_new], ignore_index=True)
+                    # Deduplicate to ensure UI doesn't show double entries
+                    st.session_state.df = pd.concat([st.session_state.df, all_new], ignore_index=True).drop_duplicates(
+                        subset=['Branch', 'AccountID', 'MemberName', 'Report_Date'], 
+                        keep='last'
+                    )
                     
                     # 3. Update snapshots using ONLY the newly uploaded delta (not the whole history)
                     update_historical_snapshots(all_new)
