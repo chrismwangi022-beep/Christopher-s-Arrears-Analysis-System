@@ -448,17 +448,19 @@ def main():
         return
     
     # Timeline -> Calendar: strict single-date filter using Report_Date
-    st.sidebar.subheader("Report Date")
+    st.sidebar.subheader("📅 Report Timeline")
     df_filtered = df.copy()
     if 'Report_Date' in df.columns:
-        # compute max date from the full dataset (don't mutate original df)
         df_dates = pd.to_datetime(df['Report_Date'], errors='coerce').dt.date
-        max_date = df_dates.max()
-        selected_date = st.sidebar.date_input("Select Report Date", value=max_date)
-        # strict equality filter (one date only)
-        df_filtered = df[df_dates == selected_date]
+        all_dates = sorted(df_dates.dropna().unique(), reverse=True)
+        
+        filter_by_date = st.sidebar.checkbox("Filter by specific date", value=True)
+        if filter_by_date and all_dates:
+            selected_date = st.sidebar.date_input("Select Report Date", value=all_dates[0])
+            # strict equality filter
+            df_filtered = df[df_dates == selected_date]
     else:
-        # no date column available; keep full df
+        st.sidebar.warning("Report_Date column missing from dataset.")
         df_filtered = df.copy()
     
     # Branch filter with explicit "All" option

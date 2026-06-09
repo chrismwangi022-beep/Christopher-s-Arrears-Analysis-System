@@ -246,15 +246,12 @@ def _extract_records_from_df(df: pd.DataFrame, filename: str, report_date: Optio
 def load_and_process_file(file_path: str) -> pd.DataFrame:
     """Load a single CSV or Excel file and process it."""
     filename = os.path.basename(file_path)
-    # Attempt to determine report date from filename, otherwise fallback to file modified time
+    
+    # Mandatory: Determine report date from filename
     file_report_date = extract_date_from_filename(filename)
     if file_report_date is None:
-        try:
-            file_mtime = os.path.getmtime(file_path)
-            file_report_date = datetime.fromtimestamp(file_mtime).date()
-        except Exception:
-            file_report_date = None
-    
+        print(f"ERROR: Filename '{filename}' does not contain a valid date. Skipping file.")
+        return pd.DataFrame()
     try:
         # Load file
         if file_path.lower().endswith('.csv'):
@@ -377,8 +374,11 @@ def process_uploaded_file(uploaded_file, branch_name: Optional[str] = None) -> p
         if branch_name:
             df['Branch'] = branch_name.lower().strip()
 
-        # Attempt to determine report date from filename, fallback to today
-        report_date = extract_date_from_filename(uploaded_file.name) or datetime.now().date()
+        # Mandatory: Determine report date from filename
+        report_date = extract_date_from_filename(uploaded_file.name)
+        if report_date is None:
+            print(f"ERROR: Uploaded file '{uploaded_file.name}' rejected: No date found in filename.")
+            return pd.DataFrame()
 
         # Delegate processing to the core logic function
         return _extract_records_from_df(df, uploaded_file.name, report_date)
@@ -418,7 +418,15 @@ def append_to_master_dataset(new_df: pd.DataFrame):
     if os.path.exists(MASTER_DATASET_PATH):
         try:
             existing_df = pd.read_parquet(MASTER_DATASET_PATH, engine='pyarrow')
-            # Combine and deduplicate to prevent doubling on repeated uploads
+            
+            # Normalize dates in both sets to prevent merge mismatches
+            for frame in [existing_df, new_df]:
+                if 'Report_Date' in frame.columns:
+                    frame['Report_Date'] = pd.to_datetime(frame['Report_Date'], errors='coerce').dt.date
+            
+            # Remove rows with invalid dates before concat
+            new_df = new_df.dropna(subset=['Report_Date']) if 'Report_Date' in new_df.columns else new_df
+
             updated_df = pd.concat([existing_df, new_df], ignore_index=True).drop_duplicates(
                 subset=['Branch', 'AccountID', 'MemberName', 'Report_Date'], 
                 keep='last'
