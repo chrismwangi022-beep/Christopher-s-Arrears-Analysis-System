@@ -376,9 +376,11 @@ def process_uploaded_file(uploaded_file, branch_name: Optional[str] = None) -> p
         if branch_name:
             df['Branch'] = branch_name.lower().strip()
 
-        # Delegate to the core processing function
-        # For uploaded files, we assume the report date is today
-        return _extract_records_from_df(df, uploaded_file.name, datetime.now().date())
+        # Attempt to determine report date from filename, fallback to today
+        report_date = extract_date_from_filename(uploaded_file.name) or datetime.now().date()
+
+        # Delegate processing to the core logic function
+        return _extract_records_from_df(df, uploaded_file.name, report_date)
         
     except Exception as e:
         print(f"Error processing uploaded file: {e}")
