@@ -447,18 +447,27 @@ def main():
         st.error("No data loaded. Please check the data folder path.")
         return
     
-    # Timeline -> Calendar: strict single-date filter using Report_Date
+    # Timeline -> Calendar: flexible multiselect filter
     st.sidebar.subheader("📅 Report Timeline")
-    df_filtered = df.copy()
     if 'Report_Date' in df.columns:
-        df_dates = pd.to_datetime(df['Report_Date'], errors='coerce').dt.date
-        all_dates = sorted(df_dates.dropna().unique(), reverse=True)
+        # Normalize column to Python date objects for UI consistency
+        df['Report_Date'] = pd.to_datetime(df['Report_Date'], errors='coerce').dt.date
+        all_dates = sorted(df['Report_Date'].dropna().unique(), reverse=True)
         
-        filter_by_date = st.sidebar.checkbox("Filter by specific date", value=True)
-        if filter_by_date and all_dates:
-            selected_date = st.sidebar.date_input("Select Report Date", value=all_dates[0])
-            # strict equality filter
-            df_filtered = df[df_dates == selected_date]
+        if all_dates:
+            # Provide date strings for UI selection
+            date_options = [d.strftime('%Y-%m-%d') for d in all_dates]
+            selected_strs = st.sidebar.multiselect("View Reports for:", options=date_options, default=[date_options[0]])
+            
+            if selected_strs:
+                selected_dates = [datetime.strptime(s, '%Y-%m-%d').date() for s in selected_strs]
+                df_filtered = df[df['Report_Date'].isin(selected_dates)]
+            else:
+                # Standard behavior: no filter selected = view all historical data
+                df_filtered = df.copy()
+                st.sidebar.info("Viewing historical view (all dates).")
+        else:
+            df_filtered = df.copy()
     else:
         st.sidebar.warning("Report_Date column missing from dataset.")
         df_filtered = df.copy()

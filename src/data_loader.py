@@ -140,7 +140,7 @@ def extract_branch_and_officer(df: pd.DataFrame, filename: str) -> pd.DataFrame:
     return df
 
 
-def _extract_records_from_df(df: pd.DataFrame, filename: str, report_date: Optional[datetime.date]) -> pd.DataFrame:
+def _extract_records_from_df(df: pd.DataFrame, filename: str, report_date: datetime.date) -> pd.DataFrame:
     """Core logic to process a raw DataFrame and extract valid arrears records."""
     # Detect columns
     arrears_col = detect_column_by_pattern(df, COLUMN_PATTERNS["arrears"], DEFAULT_COLUMNS["arrears"])
@@ -187,7 +187,7 @@ def _extract_records_from_df(df: pd.DataFrame, filename: str, report_date: Optio
             'Branch': str(row['Branch']) if pd.notna(row['Branch']) else extract_branch_from_filename(filename),
             'Loan_Officer': str(row['Loan_Officer']) if pd.notna(row['Loan_Officer']) else None,
             'MemberName': member_name_raw,
-            'Report_Date': report_date,
+            'Report_Date': report_date, # Enforce strict report date from filename
         }
 
         # Extract values with error handling
@@ -221,6 +221,9 @@ def _extract_records_from_df(df: pd.DataFrame, filename: str, report_date: Optio
         return pd.DataFrame()
 
     result_df = pd.DataFrame(result_data)
+
+    # Ensure Report_Date is consistently typed as a Python date object
+    result_df['Report_Date'] = pd.to_datetime(result_df['Report_Date'], errors='coerce').dt.date
 
     # Fill missing Principle/TotalBalance with fallbacks
     if 'Principle' in result_df.columns:
