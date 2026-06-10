@@ -605,16 +605,27 @@ def main():
                         file_content = uploaded_file.getvalue()
                         file_hash = hashlib.md5(file_content).hexdigest()
 
-                        # 2, 3 & 4. Cache check to prevent duplicate processing of identical files
+                        # Cache check and processing
                         if file_hash in st.session_state.uploaded_files_cache:
                             print(f"CACHE HIT: {uploaded_file.name}") # 5. Logging
                             new_df = st.session_state.uploaded_files_cache[file_hash]
                         else:
-                            print(f"CACHE MISS: {uploaded_file.name}") # 5. Logging
                             uploaded_file.seek(0) # Reset pointer for the data loader
+                            
+                            # Validation & Extraction
+                            unique_dates_before = st.session_state.df['Report_Date'].nunique() if not st.session_state.df.empty else 0
                             new_df = process_uploaded_file(uploaded_file)
+                            
                             if not new_df.empty:
                                 st.session_state.uploaded_files_cache[file_hash] = new_df
+                                extracted_date = new_df['Report_Date'].iloc[0]
+                                
+                                # LOGGING REQUIREMENTS
+                                print(f"--- UPLOAD DEBUG ---")
+                                print(f"Filename: {uploaded_file.name}")
+                                print(f"Extracted Report Date: {extracted_date}")
+                                print(f"Records Extracted: {len(new_df)}")
+                                print(f"Unique Dates Before Save: {unique_dates_before}")
 
                         if not new_df.empty:
                             new_data_frames.append(new_df)
@@ -623,6 +634,7 @@ def main():
                         with open(destination_path, "wb") as f:
                             f.write(file_content)
                         saved_count += 1
+                            print(f"Unique Dates After Save: {st.session_state.df['Report_Date'].nunique() + (1 if extracted_date not in st.session_state.df['Report_Date'].values else 0)}")
                     except Exception as e:
                         errors.append(f"{uploaded_file.name}: {e}")
                 
