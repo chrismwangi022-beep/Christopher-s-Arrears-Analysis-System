@@ -694,12 +694,13 @@ def get_aging_arrears_summary(df: pd.DataFrame) -> pd.Series:
     return df.groupby('Aging_Bucket')[arrears_col].sum()
 
 
-def get_filtered_trend_data(df: pd.DataFrame, group_by: str, top_n: int = 10) -> pd.DataFrame:
+def get_filtered_trend_data(df: pd.DataFrame, group_by: str, top_n: int = 25) -> pd.DataFrame:
     """Prepares trend data for plotting, ensuring ZERO math remains in the UI."""
     if df.empty or 'Report_Date' not in df.columns:
         return pd.DataFrame()
     
     df_trend = df.copy()
+    # Ensure strict datetime conversion for grouping
     df_trend['Report_Date'] = pd.to_datetime(df_trend['Report_Date'], errors='coerce')
     df_trend = df_trend.dropna(subset=['Report_Date'])
     
@@ -841,7 +842,6 @@ def get_standard_metrics_package(df_display: pd.DataFrame, df_full: pd.DataFrame
         recent_trend = (
             df_full.groupby(date_col)[arrears_col]
             .sum()
-            .tail(7)
             .to_dict()
         )
 

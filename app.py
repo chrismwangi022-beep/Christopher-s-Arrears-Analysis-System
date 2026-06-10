@@ -442,6 +442,12 @@ def main():
             # Pipeline Diagnostics
             st.write("### 🔍 Data Pipeline Diagnostics")
             st.write(f"**Total Records Loaded:** {len(df):,}")
+            if not df.empty and 'Report_Date' in df.columns:
+                df_dates = pd.to_datetime(df['Report_Date'])
+                st.write(f"**Unique Report Dates Loaded:** {df['Report_Date'].nunique()}")
+                st.write(f"**Earliest Report Date:** {df_dates.min().strftime('%Y-%m-%d')}")
+                st.write(f"**Latest Report Date:** {df_dates.max().strftime('%Y-%m-%d')}")
+            
             st.write(f"**Unique Branches Found:** {df['Branch'].nunique()}")
             st.dataframe(df['Branch'].value_counts().head(20), use_container_width=True)
 

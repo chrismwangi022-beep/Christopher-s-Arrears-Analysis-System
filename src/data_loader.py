@@ -334,6 +334,11 @@ def load_all_data() -> pd.DataFrame:
     for col in numeric_cols:
         if col in combined_df.columns:
             combined_df[col] = pd.to_numeric(combined_df[col], errors='coerce').fillna(0.0)
+            
+    # Ensure uniform date types for trend consistency
+    if 'Report_Date' in combined_df.columns:
+        combined_df['Report_Date'] = pd.to_datetime(combined_df['Report_Date'], errors='coerce')
+        combined_df = combined_df.dropna(subset=['Report_Date'])
     
     print(f"\nSUCCESS: Total records loaded: {len(combined_df)}")
     print(f"Final columns: {list(combined_df.columns)}")
@@ -425,6 +430,11 @@ def append_to_master_dataset(new_df: pd.DataFrame):
             existing_df = pd.read_parquet(MASTER_DATASET_PATH, engine='pyarrow')
             # Append and enforce integrity by removing potential duplicates
             updated_df = pd.concat([existing_df, new_df], ignore_index=True).drop_duplicates()
+            
+            # Strict type enforcement before saving to Parquet
+            updated_df['Report_Date'] = pd.to_datetime(updated_df['Report_Date'], errors='coerce')
+            updated_df['Arrears'] = pd.to_numeric(updated_df['Arrears'], errors='coerce').fillna(0.0)
+            
             updated_df.to_parquet(MASTER_DATASET_PATH, index=False, engine='pyarrow')
             print(f"DEBUG: Successfully appended {len(new_df)} records to {MASTER_DATASET_PATH}")
         except Exception as e:
