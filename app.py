@@ -474,22 +474,22 @@ def main():
         # no date column available; keep full df
         df_filtered = df.copy()
     
-    # Branch filter with explicit "All" option
-    branches = sorted(df_filtered['Branch'].dropna().unique())
+    # Branch filter with explicit "All" option - derived from full dataset for historical trends
+    branches = sorted(df['Branch'].dropna().unique())
     branch_options = ["All"] + branches
     selected_branches = st.sidebar.multiselect("Branch", branch_options, default=["All"])
     if selected_branches and "All" not in selected_branches:
         df_filtered = df_filtered[df_filtered['Branch'].isin(selected_branches)]
     
     # Loan Officer filter with explicit "All" option
-    officers = sorted(df_filtered['Loan_Officer'].dropna().unique())
+    officers = sorted(df['Loan_Officer'].dropna().unique())
     officer_options = ["All"] + officers
     selected_officers = st.sidebar.multiselect("Loan Officer", officer_options, default=["All"])
     if selected_officers and "All" not in selected_officers:
         df_filtered = df_filtered[df_filtered['Loan_Officer'].isin(selected_officers)]
     
     # Product filter with explicit "All" option + option to hide Unspecified
-    products = sorted(df_filtered['Product'].dropna().unique())
+    products = sorted(df['Product'].dropna().unique())
     hide_unspecified = False
     if "Unspecified" in products:
         hide_unspecified = st.sidebar.checkbox("Hide Unspecified Products", value=False)
@@ -1215,6 +1215,17 @@ def main():
         df_trend['Report_Date'] = pd.to_datetime(df_trend['Report_Date'], errors='coerce')
         df_trend['Arrears'] = pd.to_numeric(df_trend['Arrears'], errors='coerce').fillna(0)
         df_trend = df_trend.dropna(subset=['Report_Date'])
+
+        # DIAGNOSTICS & VALIDATION
+        print("--- TREND DIAGNOSTICS ---")
+        print("TREND ROWS:", len(df_trend))
+        print("TREND UNIQUE DATES:", sorted(df_trend['Report_Date'].dt.date.unique()))
+        print("TREND DATE COUNT:", df_trend['Report_Date'].nunique())
+        print("MASTER DATE COUNT:", df['Report_Date'].nunique())
+        print(f"Earliest Report_Date: {df_trend['Report_Date'].min()}")
+        print(f"Latest Report_Date: {df_trend['Report_Date'].max()}")
+        print(f"Total Unique Dates: {df_trend['Report_Date'].nunique()}")
+        print(f"Rows Used By Trend Chart: {len(df_trend)}")
 
         trend_grp = get_filtered_trend_data(df_trend, group_choice)
         if not trend_grp.empty and trend_grp['Arrears'].sum() > 0:

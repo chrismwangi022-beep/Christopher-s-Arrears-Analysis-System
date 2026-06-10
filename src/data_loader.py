@@ -239,6 +239,10 @@ def _extract_records_from_df(df: pd.DataFrame, filename: str, report_date: Optio
         if col in result_df.columns:
             result_df[col] = pd.to_numeric(result_df[col], errors='coerce').fillna(0.0)
 
+    # Enforce uniform datetime type for all extracted records
+    if 'Report_Date' in result_df.columns:
+        result_df['Report_Date'] = pd.to_datetime(result_df['Report_Date'], errors='coerce')
+
     return result_df
 
 
@@ -398,6 +402,10 @@ def load_master_dataset() -> pd.DataFrame:
     if os.path.exists(MASTER_DATASET_PATH):
         df = pd.read_parquet(MASTER_DATASET_PATH, engine='pyarrow')
         
+        # Ensure strict type enforcement on load
+        if 'Report_Date' in df.columns:
+            df['Report_Date'] = pd.to_datetime(df['Report_Date'], errors='coerce')
+
         # HEURISTIC: Check for incomplete initialization (1 branch vs multiple source files)
         raw_files = [f for f in os.listdir(DATA_FOLDER) if f.lower().endswith(('.csv', '.xlsx', '.xls'))]
         if df['Branch'].nunique() <= 1 and len(raw_files) > 1:
