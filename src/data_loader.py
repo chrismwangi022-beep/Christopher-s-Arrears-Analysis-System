@@ -239,7 +239,7 @@ def _extract_records_from_df(df: pd.DataFrame, filename: str, report_date: Optio
         if col in result_df.columns:
             result_df[col] = pd.to_numeric(result_df[col], errors='coerce').fillna(0.0)
 
-    # Enforce uniform datetime type for all extracted records
+    # Enforce uniform datetime type for all extracted records to prevent trend fragmentation
     if 'Report_Date' in result_df.columns:
         result_df['Report_Date'] = pd.to_datetime(result_df['Report_Date'], errors='coerce')
 

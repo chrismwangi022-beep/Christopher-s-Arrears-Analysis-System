@@ -474,7 +474,7 @@ def main():
         # no date column available; keep full df
         df_filtered = df.copy()
     
-    # Branch filter with explicit "All" option - derived from full dataset for historical trends
+    # Derive filter options from full 'df' to ensure historical entities are selectable
     branches = sorted(df['Branch'].dropna().unique())
     branch_options = ["All"] + branches
     selected_branches = st.sidebar.multiselect("Branch", branch_options, default=["All"])
@@ -1216,16 +1216,12 @@ def main():
         df_trend['Arrears'] = pd.to_numeric(df_trend['Arrears'], errors='coerce').fillna(0)
         df_trend = df_trend.dropna(subset=['Report_Date'])
 
-        # DIAGNOSTICS & VALIDATION
-        print("--- TREND DIAGNOSTICS ---")
-        print("TREND ROWS:", len(df_trend))
-        print("TREND UNIQUE DATES:", sorted(df_trend['Report_Date'].dt.date.unique()))
-        print("TREND DATE COUNT:", df_trend['Report_Date'].nunique())
-        print("MASTER DATE COUNT:", df['Report_Date'].nunique())
-        print(f"Earliest Report_Date: {df_trend['Report_Date'].min()}")
-        print(f"Latest Report_Date: {df_trend['Report_Date'].max()}")
-        print(f"Total Unique Dates: {df_trend['Report_Date'].nunique()}")
-        print(f"Rows Used By Trend Chart: {len(df_trend)}")
+        # DIAGNOSTIC LOGGING
+        print(f"--- TREND ANALYSIS DIAGNOSTICS ({group_choice}) ---")
+        print(f"MASTER ROWS: {len(df)}")
+        print(f"TREND ROWS: {len(df_trend)}")
+        print(f"UNIQUE DATES: {df_trend['Report_Date'].nunique()}")
+        print(f"DATE RANGE: {df_trend['Report_Date'].min()} to {df_trend['Report_Date'].max()}")
 
         trend_grp = get_filtered_trend_data(df_trend, group_choice)
         if not trend_grp.empty and trend_grp['Arrears'].sum() > 0:
