@@ -634,7 +634,7 @@ def main():
                         with open(destination_path, "wb") as f:
                             f.write(file_content)
                         saved_count += 1
-                            print(f"Unique Dates After Save: {st.session_state.df['Report_Date'].nunique() + (1 if extracted_date not in st.session_state.df['Report_Date'].values else 0)}")
+                        print(f"Unique Dates After Save: {st.session_state.df['Report_Date'].nunique() + (1 if extracted_date not in st.session_state.df['Report_Date'].values else 0)}")
                     except Exception as e:
                         errors.append(f"{uploaded_file.name}: {e}")
                 
