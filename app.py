@@ -592,6 +592,7 @@ def main():
                 skipped_count = 0
                 errors = []
                 new_data_frames = []
+                extracted_date = None
                 
                 for uploaded_file in uploaded_files:
                     destination_path = os.path.join(DATA_FOLDER, uploaded_file.name)
@@ -618,23 +619,24 @@ def main():
                             
                             if not new_df.empty:
                                 st.session_state.uploaded_files_cache[file_hash] = new_df
-                                extracted_date = new_df['Report_Date'].iloc[0]
                                 
                                 # LOGGING REQUIREMENTS
                                 print(f"--- UPLOAD DEBUG ---")
                                 print(f"Filename: {uploaded_file.name}")
-                                print(f"Extracted Report Date: {extracted_date}")
+                                print(f"Extracted Report Date: {new_df['Report_Date'].iloc[0]}")
                                 print(f"Records Extracted: {len(new_df)}")
                                 print(f"Unique Dates Before Save: {unique_dates_before}")
 
                         if not new_df.empty:
+                            extracted_date = new_df['Report_Date'].iloc[0]
                             new_data_frames.append(new_df)
                             
                         # Save file to local storage
                         with open(destination_path, "wb") as f:
                             f.write(file_content)
                         saved_count += 1
-                        print(f"Unique Dates After Save: {st.session_state.df['Report_Date'].nunique() + (1 if extracted_date not in st.session_state.df['Report_Date'].values else 0)}")
+                        if extracted_date is not None:
+                            print(f"Unique Dates After Save: {st.session_state.df['Report_Date'].nunique() + (1 if extracted_date not in st.session_state.df['Report_Date'].values else 0)}")
                     except Exception as e:
                         errors.append(f"{uploaded_file.name}: {e}")
                 
