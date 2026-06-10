@@ -1195,55 +1195,80 @@ def main():
         fig_pie.update_layout(dragmode='pan')
         st.plotly_chart(fig_pie, use_container_width=True, config={'scrollZoom': False})
 
-    # --- REFACTOR: Consolidated Trend Analysis Section ---
+    # ────────────────────────────────────────────────────────
+    # NEW TREND ANALYSIS MODULE (REBUILT FROM SCRATCH)
+    # ────────────────────────────────────────────────────────
     st.markdown("---")
-    st.subheader("📈 Trend Analysis")
-    group_choice = st.radio("Group Trends By:", ["Branch", "Loan_Officer", "Product"], horizontal=True, key="trend_group")
+    st.subheader("📈 Temporal Portfolio Trends")
 
-    # Build trend dataframe from the full dataset (df), but apply the entity filters from the sidebar.
-    # This ignores the date filter to show historical trends for the selected entities.
-    df_trend = df.copy()
+    # 1. Source Data Preparation (Master Dataframe)
+    # We use 'df' (full history) instead of 'df_display' (single date)
+    trend_source = df.copy()
+
+    # 2. Entity Filter Application (Ignoring Date Range Filter)
     if selected_branches and "All" not in selected_branches:
-        df_trend = df_trend[df_trend['Branch'].isin(selected_branches)]
+        trend_source = trend_source[trend_source['Branch'].isin(selected_branches)]
     if selected_officers and "All" not in selected_officers:
-        df_trend = df_trend[df_trend['Loan_Officer'].isin(selected_officers)]
+        trend_source = trend_source[trend_source['Loan_Officer'].isin(selected_officers)]
     if selected_products and "All" not in selected_products:
-        df_trend = df_trend[df_trend['Product'].isin(selected_products)]
+        trend_source = trend_source[trend_source['Product'].isin(selected_products)]
 
-    # Clean trend data
-    if 'Report_Date' in df_trend.columns:
-        df_trend['Report_Date'] = pd.to_datetime(df_trend['Report_Date'], errors='coerce')
-        df_trend['Arrears'] = pd.to_numeric(df_trend['Arrears'], errors='coerce').fillna(0)
-        df_trend = df_trend.dropna(subset=['Report_Date'])
+    # 3. Data Integrity & Cleaning
+    if 'Report_Date' in trend_source.columns:
+        trend_source['Report_Date'] = pd.to_datetime(trend_source['Report_Date'], errors='coerce')
+        trend_source = trend_source.dropna(subset=['Report_Date'])
+        trend_source['Arrears'] = pd.to_numeric(trend_source['Arrears'], errors='coerce').fillna(0)
 
-        # DIAGNOSTIC LOGGING
-        print(f"--- TREND ANALYSIS DIAGNOSTICS ({group_choice}) ---")
-        print(f"MASTER ROWS: {len(df)}")
-        print(f"TREND ROWS: {len(df_trend)}")
-        print(f"UNIQUE DATES: {df_trend['Report_Date'].nunique()}")
-        print(f"DATE RANGE: {df_trend['Report_Date'].min()} to {df_trend['Report_Date'].max()}")
+        # 4. Dimension Selection
+        trend_dimension = st.radio(
+            "Trend Segmentation:", 
+            ["Branch", "Loan_Officer", "Product"], 
+            horizontal=True, 
+            key="trend_dimension_selector"
+        )
 
-        trend_grp = get_filtered_trend_data(df_trend, group_choice)
-        if not trend_grp.empty and trend_grp['Arrears'].sum() > 0:
-            try:
-                palette = [COLORS['accent_cyan'], COLORS['accent_orange'], COLORS['accent_amber'], COLORS['accent_red'], COLORS['accent_yellow']]
-                fig_daily = px.line(
-                    trend_grp,
-                    x='Report_Date',
-                    y='Arrears',
-                    color=group_choice,
-                    markers=True,
-                    color_discrete_sequence=palette,
-                )
-                fig_daily.update_traces(hovertemplate=f"%{{x}}<br>Arrears: {CURRENCY_SYMBOL} %{{y:,.0f}}<extra></extra>")
-                fig_daily.update_layout(height=450, template='plotly_dark', title=f'Arrears Movement Over Time by {group_choice}', dragmode='pan')
-                st.plotly_chart(fig_daily, use_container_width=True, config={'scrollZoom': False})
-            except Exception as e:
-                st.error(f"Error plotting trend analysis: {e}")
+        # 5. Diagnostics Display
+        unique_dates = trend_source['Report_Date'].dt.date.unique()
+        n_groups = trend_source[trend_dimension].nunique()
+
+        st.caption("🔍 Temporal Intelligence Diagnostics")
+        diag_col1, diag_col2, diag_col3, diag_col4, diag_col5 = st.columns(5)
+        diag_col1.metric("Rows Found", f"{len(trend_source):,}")
+        diag_col2.metric("Date Points", len(unique_dates))
+        diag_col3.metric("Earliest Date", str(min(unique_dates)) if len(unique_dates) > 0 else "N/A")
+        diag_col4.metric("Latest Date", str(max(unique_dates)) if len(unique_dates) > 0 else "N/A")
+        diag_col5.metric("Groups", n_groups)
+
+        with st.expander("📊 View Data Density per Report Date"):
+            density_df = trend_source.groupby(trend_source['Report_Date'].dt.date).size().reset_index(name='Rows per Report_Date')
+            st.dataframe(density_df.sort_values('Report_Date', ascending=False), use_container_width=True, hide_index=True)
+
+        # 6. Aggregation Logic
+        trend_data_agg = trend_source.groupby(['Report_Date', trend_dimension])['Arrears'].sum().reset_index()
+
+        # 7. Visualization (Plotly Line Chart)
+        if not trend_data_agg.empty:
+            fig_trend = px.line(
+                trend_data_agg,
+                x='Report_Date',
+                y='Arrears',
+                color=trend_dimension,
+                title=f"Historical Arrears Exposure by {trend_dimension}",
+                markers=True,
+                labels={'Arrears': f'Arrears ({CURRENCY_SYMBOL})', 'Report_Date': 'Timeline'},
+                template="plotly_dark"
+            )
+            fig_trend.update_layout(
+                hovermode="x unified",
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                margin=dict(l=0, r=0, t=80, b=0),
+                height=500
+            )
+            st.plotly_chart(fig_trend, use_container_width=True)
         else:
-            st.info("No historical data available for the selected filters to plot trends.")
+            st.info("Insufficient historical data available for visualization with current filters.")
     else:
-        st.info("No `Report_Date` column in dataset; cannot plot trends.")
+        st.error("Historical Trend Analysis requires a 'Report_Date' column in the dataset.")
     
     # --- 📡 Branch Recovery Radar Integration ---
     # Placement: Below Trend Analysis, Above Weekly Report.
