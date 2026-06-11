@@ -18,7 +18,6 @@ from .constants import (
     HEADER_KEYWORDS,
 )
 
-MASTER_DATASET_PATH = os.path.join("data", "master_dataset.parquet")
 
 def detect_column_by_pattern(df: pd.DataFrame, patterns: List[str], default_col: Optional[int] = None) -> Optional[int]:
     """Detect column index by matching header patterns."""
@@ -239,10 +238,6 @@ def _extract_records_from_df(df: pd.DataFrame, filename: str, report_date: Optio
         if col in result_df.columns:
             result_df[col] = pd.to_numeric(result_df[col], errors='coerce').fillna(0.0)
 
-    # Enforce uniform datetime type for all extracted records to prevent trend fragmentation
-    if 'Report_Date' in result_df.columns:
-        result_df['Report_Date'] = pd.to_datetime(result_df['Report_Date'], errors='coerce')
-
     return result_df
 
 
@@ -338,11 +333,6 @@ def load_all_data() -> pd.DataFrame:
     for col in numeric_cols:
         if col in combined_df.columns:
             combined_df[col] = pd.to_numeric(combined_df[col], errors='coerce').fillna(0.0)
-            
-    # Ensure uniform date types for trend consistency
-    if 'Report_Date' in combined_df.columns:
-        combined_df['Report_Date'] = pd.to_datetime(combined_df['Report_Date'], errors='coerce')
-        combined_df = combined_df.dropna(subset=['Report_Date'])
     
     print(f"\nSUCCESS: Total records loaded: {len(combined_df)}")
     print(f"Final columns: {list(combined_df.columns)}")
@@ -366,7 +356,6 @@ def process_uploaded_file(uploaded_file, branch_name: Optional[str] = None) -> p
     try:
         # Determine file type
         filename = uploaded_file.name.lower()
-        report_date = extract_date_from_filename(uploaded_file.name)
         
         # Read file
         if filename.endswith('.csv'):
@@ -387,66 +376,9 @@ def process_uploaded_file(uploaded_file, branch_name: Optional[str] = None) -> p
             df['Branch'] = branch_name.lower().strip()
 
         # Delegate to the core processing function
-        return _extract_records_from_df(df, uploaded_file.name, report_date)
+        # For uploaded files, we assume the report date is today
+        return _extract_records_from_df(df, uploaded_file.name, datetime.now().date())
         
     except Exception as e:
         print(f"Error processing uploaded file: {e}")
         return pd.DataFrame()
-
-def load_master_dataset() -> pd.DataFrame:
-    """
-    Loads the master dataset from Parquet format.
-    If Parquet doesn't exist, builds it from historical CSV/XLSX files using load_all_data().
-    """
-    # Check if parquet exists and is healthy
-    if os.path.exists(MASTER_DATASET_PATH):
-        df = pd.read_parquet(MASTER_DATASET_PATH, engine='pyarrow')
-        
-        # Ensure strict type enforcement on load
-        if 'Report_Date' in df.columns:
-            df['Report_Date'] = pd.to_datetime(df['Report_Date'], errors='coerce')
-
-        # HEURISTIC: Check for incomplete initialization (1 branch vs multiple source files)
-        raw_files = [f for f in os.listdir(DATA_FOLDER) if f.lower().endswith(('.csv', '.xlsx', '.xls'))]
-        if df['Branch'].nunique() <= 1 and len(raw_files) > 1:
-            print("DEBUG: Master Parquet appears incomplete (Single Branch). Rebuilding from source...")
-        else:
-            print(f"DEBUG: Loading existing master dataset from {MASTER_DATASET_PATH}")
-            return df
-
-    # Initial Build or Forced Rebuild
-    print(f"DEBUG: Initializing master dataset from all files in {DATA_FOLDER}...")
-    df = load_all_data()
-    if not df.empty:
-        os.makedirs(os.path.dirname(MASTER_DATASET_PATH), exist_ok=True)
-        df.to_parquet(MASTER_DATASET_PATH, index=False, engine='pyarrow')
-        print(f"DEBUG: Master dataset initialized and saved to {MASTER_DATASET_PATH}")
-    return df
-
-def append_to_master_dataset(new_df: pd.DataFrame):
-    """
-    Appends new records to the master parquet file to keep the persistent dataset updated.
-    """
-    if new_df.empty:
-        return
-
-    # Ensure directory exists
-    os.makedirs(os.path.dirname(MASTER_DATASET_PATH), exist_ok=True)
-
-    if os.path.exists(MASTER_DATASET_PATH):
-        try:
-            existing_df = pd.read_parquet(MASTER_DATASET_PATH, engine='pyarrow')
-            # Append and enforce integrity by removing potential duplicates
-            updated_df = pd.concat([existing_df, new_df], ignore_index=True).drop_duplicates()
-            
-            # Strict type enforcement before saving to Parquet
-            updated_df['Report_Date'] = pd.to_datetime(updated_df['Report_Date'], errors='coerce')
-            updated_df['Arrears'] = pd.to_numeric(updated_df['Arrears'], errors='coerce').fillna(0.0)
-            
-            updated_df.to_parquet(MASTER_DATASET_PATH, index=False, engine='pyarrow')
-            print(f"DEBUG: Successfully appended {len(new_df)} records to {MASTER_DATASET_PATH}")
-        except Exception as e:
-            print(f"ERROR appending to master dataset: {e}")
-    else:
-        new_df.to_parquet(MASTER_DATASET_PATH, index=False, engine='pyarrow')
-        print(f"DEBUG: Master dataset created at {MASTER_DATASET_PATH} with initial records.")

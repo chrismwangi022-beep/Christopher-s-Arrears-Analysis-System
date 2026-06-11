@@ -5,55 +5,33 @@ Main Streamlit Application
 
 import streamlit as st
 import pandas as pd
-try:
-    import plotly.graph_objects as go
-    import plotly.express as px
-    HAS_PLOTLY = True
-except ImportError:
-    HAS_PLOTLY = False
-
+import plotly.express as px
+import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import sys
 import os
 import io
-import tempfile
-import hashlib
-import stat
-import time
+import git
 
-try:
-    import git
-    HAS_GIT = True
-except ImportError:
-    HAS_GIT = False
+# Add src to path
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# Ensure robust path resolution for Streamlit Cloud
-ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
-if ROOT_DIR not in sys.path:
-    sys.path.insert(0, ROOT_DIR)
-
-from src.data_loader import load_master_dataset, append_to_master_dataset, process_uploaded_file
+from src.data_loader import load_all_data
 from src.calculations import (
     calculate_par_percentage,
     get_top_risk_branch,
-    get_branch_performance,
     get_top_risk_product,
+    get_star_performers,
     get_portfolio_distribution_by_aging,
+    get_branch_risk_percentage,
+    get_main_driver_product_in_branch,
     get_top_accounts_by_band,
     get_priority_band_summary,
     categorize_by_aging,
     get_officer_performance,
-    get_branch_arrears_summary,
-    get_product_arrears_summary,
-    get_aging_arrears_summary,
-    get_filtered_trend_data,
-    get_officer_ranking_split,
-    get_standard_metrics_package,
-)
-from src.ai_engine import (
-    generate_ai_insights, 
-    get_ai_health_state, 
-    generate_weekly_recovery_reports
+    get_arrears_time_series,
+    get_trend_for_entity,
+    get_top_movers,
 )
 from src.constants import (
     COLORS,
@@ -63,179 +41,64 @@ from src.constants import (
     CHART_CONFIG,
     DATA_FOLDER,
 )
-from weekly_recovery_gemini import update_historical_snapshots
-from src.branch_ai import render_branch_intelligence
 
 # Page configuration
 st.set_page_config(
-    page_title="Spread Capital Arrears Analysis System",
-    page_icon="assets/sc_favicon_32.png",
-    layout="wide"
+    page_title="Spread Capital - Arrears Analysis",
+    page_icon="📊",
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
-
-# --- Secrets Configuration Helper ---
-def get_secret(key, default=None):
-    """Safely retrieves a secret from st.secrets to prevent app crashes."""
-    try:
-        return st.secrets.get(key, default)
-    except Exception:
-        return default
-
-# --- Performance Logging Helper ---
-class PerformanceTimer:
-    """Context manager to measure and log execution time of blocks."""
-    def __init__(self, name="Operation"):
-        self.name = name
-    def __enter__(self):
-        self.start = time.perf_counter()
-        return self
-    def __exit__(self, type, value, traceback):
-        self.end = time.perf_counter()
-        duration = self.end - self.start
-        print(f"PERF: {self.name} took {duration:.4f} seconds")
 
 # Custom CSS for Spread Capital branding
 st.markdown("""
 <style>
-    /* Make Streamlit's default header transparent and functional */
-    header[data-testid="stHeader"] {
-        background: rgba(0,0,0,0) !important; /* Fully transparent background */
-        height: 2.8rem !important; /* Keep a functional height for buttons */
-        pointer-events: auto !important; /* Ensure buttons are clickable */
-        z-index: 999999; /* Ensure it's always on top for interaction */
-        position: fixed; /* Keep it fixed at the top */
-        top: 0;
-        left: 0;
-        right: 0;
-    }
-    /* Remove Streamlit's default main menu styling if it interferes */
-    #MainMenu {
-        visibility: hidden; /* Hide the default Streamlit menu icon */
-    }
-
-    /* Absolute Page Tightening */
-    .block-container {
-        padding-top: 3.5rem !important; /* Adjust to clear the fixed transparent Streamlit header */
-        padding-bottom: 0rem !important;
-        max-width: 98% !important;
-    }
-
-    /* Reduce vertical gaps between all Streamlit blocks */
-    [data-testid="stVerticalBlock"] { /* General vertical block spacing */
-        gap: 0.4rem !important;
-    }
-    [data-testid="stHorizontalBlock"] {
-        gap: 0.75rem !important;
-    }
-
-    /* Compact Typography */
-    h1 {
-        /* Increased font size for main application header */
-        font-size: 2.8rem !important; /* Visually dominant size */
-        font-weight: 800 !important; /* Bold for prominence */
-        letter-spacing: -0.03em !important; /* Subtle letter spacing */
-        margin-top: 0rem !important;
-        margin-bottom: 0.1rem !important;
-        line-height: 1.1 !important;
-    }
-    h2 { margin-top: 0.6rem !important; margin-bottom: 0.4rem !important; font-size: 1.4rem !important; }
-    hr { 
-        margin-top: 0.35rem !important; 
-        margin-bottom: 0.35rem !important; 
-        opacity: 0.3;
-    }
     /* Sidebar styling */
     [data-testid="stSidebar"] {
         background-color: #1E2A5E;
     }
     
-    /* Force content to the absolute top edge and override Streamlit padding */
-    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
-        padding-top: 0rem !important;
-        gap: 1.2rem !important;
-    }
-
-    /* Target specific Streamlit cache classes for sidebar vertical spacing */
-    [data-testid="stSidebar"] .st-emotion-cache-1r6y4z {
-        gap: 1.2rem !important;
-    }
-    
-    /* Adjust top margin for the branding image in the sidebar */
-    [data-testid="stSidebar"] [data-testid="stImage"] {
-        margin-top: -1.5rem !important; /* Adjust as needed to pull it up */
-        margin-bottom: 0.5rem !important; /* Add a small space below the image */
-        padding-left: 10px !important; /* Keep slight left padding */
-    }
-
     /* Sidebar Headers and Labels - White & Calibri */
-    [data-testid="stSidebar"] h1 {
-        font-size: 1.6rem !important;
-        letter-spacing: -0.02em !important;
-        margin-bottom: 0.5rem !important;
-    }
-    [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3, 
+    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3, 
     [data-testid="stSidebar"] label, [data-testid="stSidebar"] p, [data-testid="stSidebar"] strong {
         color: #FFFFFF !important;
         font-family: 'Calibri', sans-serif !important;
     }
-    [data-testid="stSidebar"] .st-emotion-cache-10q9071 label { /* Target labels within stVerticalBlock */
-        color: #FFFFFF !important;
-        font-family: 'Calibri', sans-serif !important;
-    }
     
-    /* Sidebar Toggle Icon (Expanded - Left Arrow) -> Red */
+    /* Sidebar Toggle Icon (Expanded - Left Arrow) -> White */
     [data-testid="stSidebarCollapseButton"] svg {
-        fill: #E74C3C !important;
-        color: #E74C3C !important;
+        fill: #FFFFFF !important;
+        color: #FFFFFF !important;
     }
     
-    /* Sidebar Toggle Icon (Collapsed - Right Arrow) -> Red */
+    /* Sidebar Toggle Icon (Collapsed - Right Arrow) -> Black */
     [data-testid="stSidebarCollapsedControl"] svg {
-        fill: #E74C3C !important;
-        color: #E74C3C !important;
+        fill: #000000 !important;
+        color: #000000 !important;
     }
     
     /* Fix File Uploader Background & Text in Sidebar */
     [data-testid="stSidebar"] [data-testid="stFileUploader"] section {
-        background-color: rgba(0, 0, 0, 0.2) !important;
-        border: 1px dashed rgba(255, 255, 255, 0.3) !important;
-        border-radius: 12px !important;
-        padding: 1rem !important;
-        transition: border-color 0.3s ease;
+        background-color: #1E2A5E !important;
+        border: 1px dashed #FFFFFF !important;
     }
-    [data-testid="stSidebar"] [data-testid="stFileUploader"] section:hover {
-        border-color: #00D1FF !important;
-    }
-
-    /* Clean Upload Button - Fixes "uploadupload" duplication */
-    [data-testid="stSidebar"] [data-testid="stFileUploader"] button[kind="secondary"] {
+    [data-testid="stSidebar"] [data-testid="stFileUploader"] button {
         background-color: #2A3A6E !important;
-        color: #00D1FF !important;
-        border: 1px solid #00D1FF !important;
-        border-radius: 6px !important;
-        font-weight: 600 !important;
-    }
-    
-    /* Premium File Item Cards */
-    [data-testid="stSidebar"] [data-testid="stFileUploaderFile"] {
-        background-color: #2A3A6E !important;
-        border: 1px solid rgba(255, 255, 255, 0.1) !important;
-        border-left: 4px solid #00D1FF !important;
-        border-radius: 6px !important;
-        margin-bottom: 8px !important;
-        padding: 8px !important;
-    }
-    
-    /* Filename & Metadata Visibility */
-    [data-testid="stSidebar"] [data-testid="stFileUploaderFileName"] {
         color: #FFFFFF !important;
-        font-weight: 700 !important;
-        font-size: 0.95rem !important;
+        border: 1px solid #FFFFFF !important;
     }
-    [data-testid="stSidebar"] [data-testid="stFileUploaderFile"] small {
-        color: #CBD5E0 !important;
-        opacity: 1 !important;
+    
+    /* Fix Uploaded File Info (Filename, Size) & Icons in Sidebar */
+    [data-testid="stSidebar"] [data-testid="stFileUploader"] div,
+    [data-testid="stSidebar"] [data-testid="stFileUploader"] span, /* Covers prompt text and file names */
+    [data-testid="stSidebar"] [data-testid="stFileUploader"] small { /* Covers file size limit text */
+        color: #FFFFFF !important;
+        font-family: 'Calibri', sans-serif !important;
     }
+    [data-testid="stSidebar"] [data-testid="stFileUploader"] svg {
+        fill: #FFFFFF !important;
+    }
+    
     /* Fix Standard Buttons in Sidebar (e.g. Save button) */
     [data-testid="stSidebar"] .stButton button {
         background-color: #2A3A6E !important;
@@ -243,102 +106,34 @@ st.markdown("""
         border: 1px solid #FFFFFF !important;
     }
     
-    /* Header Styling - Compact SaaS Top Bar */
-    .compact-header {
-        display: flex;
-        align-items: center;
-        height: 48px; /* Fixed height */
-        padding: 0 1rem; /* px-4 */
-        border-bottom: 1px solid rgba(255, 255, 255, 0.1); /* Subtle border */
-        background-color: #1E2A5E; /* Match sidebar background */
-        color: #FFFFFF;
-        margin-bottom: 0.5rem; /* mt-2 equivalent */
+    /* Fix Alerts (Warning, Success, Error) in Sidebar */
+    [data-testid="stSidebar"] [data-testid="stAlert"] {
+        background-color: #2A3A6E !important;
+        color: #FFFFFF !important;
+        border: 1px solid #FFFFFF !important;
     }
-    .compact-header img {
-        height: 28px; /* Small SC logo icon */
-        margin-right: 0.5rem;
-    }
-    .compact-header h1 {
-        font-size: 1.1rem !important; /* text-base */
-        font-weight: 600 !important; /* font-semibold */
-        margin: 0 !important;
-        padding: 0 !important;
-        line-height: 1 !important;
-    }
-
-    /* KPI Cards - Resilient SaaS Layout */
+    
+    /* KPI Cards */
     .kpi-card {
         background: linear-gradient(135deg, #1E2A5E 0%, #2A3A6E 100%);
-        padding: 0.5rem 0.75rem !important; /* py-2 px-3 */
-        border-radius: 0.75rem !important; /* rounded-xl */
+        padding: 20px;
+        border-radius: 10px;
         color: white;
         text-align: center;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        height: 96px !important; /* h-24 */
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        overflow: hidden; /* Prevent text leak */
-        width: 100% !important;
-        min-width: 0 !important; /* Critical for flex shrinking */
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
-
-    .kpi-value-container {
-        display: flex;
-        flex-wrap: wrap; /* Graceful wrapping for large numbers */
-        align-items: baseline;
-        justify-content: center;
-        gap: 2px;
-        width: 100%;
-        min-width: 0;
-    }
-
-    .kpi-currency {
-        font-size: 0.85rem !important; /* text-sm */
-        font-weight: 600 !important;
-        color: #00D1FF;
-        opacity: 0.85;
-    }
-
+    
     .kpi-value {
-        font-weight: 700 !important;
-        line-height: 1 !important; /* leading-tight */
-        word-break: break-all !important; /* prevent horizontal overflow of digits */
-        white-space: normal !important;
-        overflow: hidden;
-        text-align: center;
-        min-width: 0;
+        font-size: 2em;
+        font-weight: bold;
         color: #00D1FF;
-        font-size: 1.125rem !important; /* text-lg */
     }
-
-    @media (min-width: 640px) { .kpi-value { font-size: 1.25rem !important; } } /* sm:text-xl */
-    @media (min-width: 1280px) { .kpi-value { font-size: 1.5rem !important; } } /* xl:text-2xl */
-
+    
     .kpi-label {
-        margin-top: 4px !important; /* mt-1 */
-        font-size: 11px !important;
-        line-height: 1.1 !important;
-        white-space: normal !important;
-        word-break: break-word !important;
-        text-align: center;
+        font-size: 0.9em;
+        margin-top: 5px;
         opacity: 0.9;
-        width: 100%;
-        min-width: 0;
     }
-
-    @media (min-width: 640px) { .kpi-label { font-size: 0.75rem !important; } } /* sm:text-xs */
-
-    /* Stabilize Responsive Grid Row */
-    [data-testid="stHorizontalBlock"]:has(.kpi-card) {
-        display: grid !important;
-        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-        gap: 0.75rem !important;
-    }
-    @media (min-width: 768px) { [data-testid="stHorizontalBlock"]:has(.kpi-card) { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; } }
-    @media (min-width: 1280px) { [data-testid="stHorizontalBlock"]:has(.kpi-card) { grid-template-columns: repeat(5, minmax(0, 1fr)) !important; } }
-    [data-testid="stHorizontalBlock"]:has(.kpi-card) > div { width: 100% !important; max-width: 100% !important; flex: none !important; }
     
     /* Priority cards */
     .priority-critical {
@@ -348,17 +143,6 @@ st.markdown("""
         border-radius: 5px;
         margin: 10px 0;
     }
-
-    /* AI Portfolio Insights - Inline Action Bar */
-    .ai-action-bar {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        height: 40px; /* h-10 */
-        padding: 0 0.75rem; /* px-3 */
-        border-radius: 8px;
-        border: 1px solid rgba(0, 209, 255, 0.3); /* Border matching accent color */
-        background-color:
     
     .priority-warning {
         border-left: 5px solid #FF8C00;
@@ -383,14 +167,6 @@ st.markdown("""
         border-radius: 5px;
         margin: 10px 0;
     }
-    .footer-caption {
-        text-align: center;
-        color: #A0AEC0;
-        font-size: 0.75rem;
-        font-style: italic;
-        margin-top: 2rem;
-        padding-bottom: 2rem;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -398,68 +174,37 @@ st.markdown("""
 if 'data_loaded' not in st.session_state:
     st.session_state.data_loaded = False
     st.session_state.df = pd.DataFrame()
-    st.session_state.last_updated = None
-    st.session_state.uploaded_files_cache = {}
 
 # Load data
-@st.cache_data(show_spinner=False)
+@st.cache_data
 def load_data():
     """Load and cache data."""
-    with PerformanceTimer("Master Parquet Load"):
-        return load_master_dataset()
+    return load_all_data()
 
 # Main app
-def get_app_data():
-    if not st.session_state.data_loaded:
+def main():
+    st.title("📊 Spread Capital - Arrears Analysis System")
+    st.markdown("---")
+    
+    # Load data
+    with st.spinner("Loading data..."):
         df = load_data()
         st.session_state.df = df
         st.session_state.data_loaded = True
-    return st.session_state.df
-
-def main():
-    # New Branding Implementation: Image at the very top of the sidebar
-    st.sidebar.image("assets/developer_branding.png", width=170)
-
-    # 1, 3 & 4. Display the success message once and automatically clear it
-    upload_msg = st.session_state.pop('upload_success', None)
-    if upload_msg:
-        st.sidebar.success(upload_msg)
-
-    # Main Page Header Branding - Minimalist Layout
-    col_h1, col_h2 = st.columns([0.6, 9.4])
-    with col_h1:
-        st.markdown('<div style="margin-top: 25px;"></div>', unsafe_allow_html=True)
-        st.image("assets/sc_logo_header.png", width=65)
-    with col_h2:
-        st.title("Spread Capital Arrears Analysis System")
-    st.markdown("---")
-
-    # Load data
-    if not st.session_state.data_loaded:
-        with st.spinner("Initializing System..."):
-            df = get_app_data()
-            
-            # Pipeline Diagnostics
-            st.write("### 🔍 Data Pipeline Diagnostics")
-            st.write(f"**Total Records Loaded:** {len(df):,}")
-            if not df.empty and 'Report_Date' in df.columns:
-                df_dates = pd.to_datetime(df['Report_Date'])
-                st.write(f"**Unique Report Dates Loaded:** {df['Report_Date'].nunique()}")
-                st.write(f"**Earliest Report Date:** {df_dates.min().strftime('%Y-%m-%d')}")
-                st.write(f"**Latest Report Date:** {df_dates.max().strftime('%Y-%m-%d')}")
-            
-            st.write(f"**Unique Branches Found:** {df['Branch'].nunique()}")
-            st.dataframe(df['Branch'].value_counts().head(20), use_container_width=True)
-
-            with PerformanceTimer("Historical Snapshot Update"):
-                update_historical_snapshots(df)
-    else:
-        df = st.session_state.df
     
     if df.empty:
         st.error("No data loaded. Please check the data folder path.")
         return
     
+    # Sidebar filters
+    st.sidebar.title("🔍 Filters")
+    # Developer credit next to Filters title
+    st.sidebar.markdown(
+        "<div style='float:right; color:#e6e6e6; font-size:12px; font-style:italic; margin-top:-26px;'>Developer_Christopher © 2026</div>",
+        unsafe_allow_html=True,
+    )
+    st.sidebar.markdown("---")
+
     # Timeline -> Calendar: strict single-date filter using Report_Date
     st.sidebar.subheader("Report Date")
     df_filtered = df.copy()
@@ -474,22 +219,22 @@ def main():
         # no date column available; keep full df
         df_filtered = df.copy()
     
-    # Derive filter options from full 'df' to ensure historical entities are selectable
-    branches = sorted(df['Branch'].dropna().unique())
+    # Branch filter with explicit "All" option
+    branches = sorted(df_filtered['Branch'].dropna().unique())
     branch_options = ["All"] + branches
     selected_branches = st.sidebar.multiselect("Branch", branch_options, default=["All"])
     if selected_branches and "All" not in selected_branches:
         df_filtered = df_filtered[df_filtered['Branch'].isin(selected_branches)]
     
     # Loan Officer filter with explicit "All" option
-    officers = sorted(df['Loan_Officer'].dropna().unique())
+    officers = sorted(df_filtered['Loan_Officer'].dropna().unique())
     officer_options = ["All"] + officers
     selected_officers = st.sidebar.multiselect("Loan Officer", officer_options, default=["All"])
     if selected_officers and "All" not in selected_officers:
         df_filtered = df_filtered[df_filtered['Loan_Officer'].isin(selected_officers)]
     
     # Product filter with explicit "All" option + option to hide Unspecified
-    products = sorted(df['Product'].dropna().unique())
+    products = sorted(df_filtered['Product'].dropna().unique())
     hide_unspecified = False
     if "Unspecified" in products:
         hide_unspecified = st.sidebar.checkbox("Hide Unspecified Products", value=False)
@@ -515,61 +260,21 @@ def main():
     else:
         df_display = df_categorized
     
-    # --- AI Health Synchronizer ---
-    ai_health = get_ai_health_state()
-    
-    # If we have existing results, verify if they are local to keep the badge honest
-    if st.session_state.get("ai_results"):
-        is_currently_local = any("(Local Analysis Mode)" in str(v) for v in st.session_state.ai_results.values())
-        if is_currently_local and ai_health["status"] == "Online":
-            ai_health.update({
-                "status": "Fallback",
-                "is_local": True,
-                "error": "Previous attempt triggered fallback."
-            })
-
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("🤖 AI Service Health")
-    
-    status_map = {
-        "Online": ("🟢 AI Online", "success"),
-        "Fallback": ("🟡 AI Fallback Mode", "warning"),
-        "Offline": ("🔴 AI Offline", "error")
-    }
-    status_label, status_type = status_map.get(ai_health["status"], ("⚪ Initializing", "info"))
-    
-    # AI Configuration Safety Check
-    gemini_key = get_secret("GEMINI_API_KEY")
-    if not gemini_key or "REPLACE_WITH" in str(gemini_key):
-        st.sidebar.warning("⚠️ Gemini API Key Not Configured")
-        st.sidebar.caption("Please update `.streamlit/secrets.toml` with your real API keys.")
-    
-    if status_type == "success": 
-        st.sidebar.success(status_label)
-    elif status_type == "warning": st.sidebar.warning(status_label)
-    else: st.sidebar.error(status_label)
-
-    with st.sidebar.expander("Service Intelligence Logs"):
-        st.caption(f"**Current Model:** `{ai_health['model']}`")
-        st.caption(f"**Last Sync:** {ai_health['last_success']}")
-        st.caption(f"**Processing:** {'Deterministic (Local)' if ai_health['is_local'] else 'Gemini (Google AI)'}")
-        if ai_health["error"]:
-            st.caption(f"**Issue:** :red[{ai_health['error']}]")
-        if st.button("🔄 Refresh AI Status", use_container_width=True):
-             st.cache_data.clear()
-             st.rerun()
-
     # Display filtered record count
     st.sidebar.markdown("---")
     st.sidebar.metric("Records", len(df_display))
     
     st.sidebar.markdown("---")
-    st.sidebar.header("⚙️ Operations Control")
+    st.sidebar.title("Data Management")
     
-    admin_pwd = get_secret("ADMIN_PASSWORD")
-    password_input = st.sidebar.text_input("Administrator Credentials", type="password", placeholder="Enter Password")
+    # Display success message if file was saved in previous run
+    if 'upload_success' in st.session_state:
+        st.sidebar.success(st.session_state.upload_success)
+        del st.session_state['upload_success']
     
-    if admin_pwd and password_input == admin_pwd:
+    password_input = st.sidebar.text_input("Enter Admin Password", type="password")
+    
+    if password_input == st.secrets["ADMIN_PASSWORD"]:
         uploaded_files = st.sidebar.file_uploader(
             "Upload & Save Daily Reports",
             type=['csv', 'xlsx'],
@@ -582,14 +287,13 @@ def main():
             existing_files = [f.name for f in uploaded_files if os.path.exists(os.path.join(DATA_FOLDER, f.name))]
             overwrite = False
             
-            st.sidebar.markdown(f"**Batch Queue:** {len(uploaded_files)} files selected")
+            st.sidebar.write(f"**Selected:** {len(uploaded_files)} files")
 
             if existing_files:
-                with st.sidebar.container():
-                    st.warning(f"⚠️ {len(existing_files)} Conflict(s) Detected")
-                    overwrite = st.checkbox("Overwrite existing records?")
+                st.sidebar.warning(f"⚠️ {len(existing_files)} file(s) already exist.")
+                overwrite = st.sidebar.checkbox("Overwrite existing files?")
 
-            if st.sidebar.button("💾 COMMIT DATA TO SYSTEM", use_container_width=True):
+            if st.sidebar.button("💾 Save Files to System"):
                 # Ensure data folder exists
                 if not os.path.exists(DATA_FOLDER):
                     os.makedirs(DATA_FOLDER)
@@ -597,8 +301,7 @@ def main():
                 saved_count = 0
                 skipped_count = 0
                 errors = []
-                new_data_frames = []
-                extracted_date = None
+                saved_file_paths = []
                 
                 for uploaded_file in uploaded_files:
                     destination_path = os.path.join(DATA_FOLDER, uploaded_file.name)
@@ -608,152 +311,63 @@ def main():
                         continue
 
                     try:
-                        # 1. Generate MD5 hash for every uploaded file to identify content uniquely
-                        file_content = uploaded_file.getvalue()
-                        file_hash = hashlib.md5(file_content).hexdigest()
-
-                        # Cache check and processing
-                        if file_hash in st.session_state.uploaded_files_cache:
-                            print(f"CACHE HIT: {uploaded_file.name}") # 5. Logging
-                            new_df = st.session_state.uploaded_files_cache[file_hash]
-                        else:
-                            uploaded_file.seek(0) # Reset pointer for the data loader
-                            
-                            # Validation & Extraction
-                            unique_dates_before = st.session_state.df['Report_Date'].nunique() if not st.session_state.df.empty else 0
-                            new_df = process_uploaded_file(uploaded_file)
-                            
-                            if not new_df.empty:
-                                st.session_state.uploaded_files_cache[file_hash] = new_df
-                                
-                                # LOGGING REQUIREMENTS
-                                print(f"--- UPLOAD DEBUG ---")
-                                print(f"Filename: {uploaded_file.name}")
-                                print(f"Extracted Report Date: {new_df['Report_Date'].iloc[0]}")
-                                print(f"Records Extracted: {len(new_df)}")
-                                print(f"Unique Dates Before Save: {unique_dates_before}")
-
-                        if not new_df.empty:
-                            extracted_date = new_df['Report_Date'].iloc[0]
-                            new_data_frames.append(new_df)
-                            
-                        # Save file to local storage
                         with open(destination_path, "wb") as f:
-                            f.write(file_content)
+                            f.write(uploaded_file.getvalue())
                         saved_count += 1
-                        if extracted_date is not None:
-                            print(f"Unique Dates After Save: {st.session_state.df['Report_Date'].nunique() + (1 if extracted_date not in st.session_state.df['Report_Date'].values else 0)}")
+                        saved_file_paths.append(destination_path)
                     except Exception as e:
                         errors.append(f"{uploaded_file.name}: {e}")
                 
-                if saved_count > 0 and new_data_frames:
-                    # 1. Process and Append incrementally to the existing session dataframe
-                    all_new = pd.concat(new_data_frames, ignore_index=True)
-                    
-                    # 2. Update the persistent master dataset (Parquet)
-                    append_to_master_dataset(all_new)
-
-                    # 2. Preserve session dataset by only appending the new delta
-                    st.session_state.df = pd.concat([st.session_state.df, all_new], ignore_index=True)
-                    
-                    # 3. Update snapshots using ONLY the newly uploaded delta (not the whole history)
-                    update_historical_snapshots(all_new)
-
-                    # 4. Git Push Logic (Maintained for synchronization)
+                if saved_count > 0:
+                    # --- GIT PUSH LOGIC ---
                     git_success_message = None
                     git_error_message = None
 
-                    if not HAS_GIT:
-                        git_error_message = "❌ GitPython library not installed. Please run 'pip install GitPython'."
+                    # 1. Securely fetch the token
+                    token = st.secrets.get("GITHUB_TOKEN")
+
+                    if not token:
+                        git_error_message = "❌ GITHUB_TOKEN not found in Streamlit Secrets."
                     else:
-                        # 1. Securely fetch the token
-                        token = get_secret("GITHUB_TOKEN")
-                        if not token:
-                            git_error_message = "❌ GITHUB_TOKEN not found in Streamlit Secrets."
-                        else:
-                            askpass_path = ""
-                            try:
-                                # Use the current working directory as the repo path
-                                repo_path = os.path.dirname(os.path.abspath(__file__))
-                                repo = git.Repo(repo_path)
+                        try:
+                            # Use the current working directory as the repo path
+                            repo_path = os.path.dirname(os.path.abspath(__file__))
+                            repo = git.Repo(repo_path)
 
-                                # 2. Setup Clean Remote URL & Authentication
-                                # Remove tokens from URL to prevent leakage in process lists or git config
-                                base_url = "github.com/chrismwangi022-beep/Christopher-s-Arrears-Analysis-System.git"
-                                clean_url = f"https://{base_url}"
-                                
-                                origin = repo.remote(name='origin')
-                                origin.set_url(clean_url)
-                                
-                                # Create a temporary ASKPASS script to handle authentication securely.
-                                # This is the production-grade way to pass tokens to Git in headless environments.
-                                with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.sh') as f:
-                                    # Token is used as the password; username is provided via the script as well
-                                    f.write(f"#!/bin/sh\necho '{token}'\n")
-                                    askpass_path = f.name
-                                
-                                # Make the script executable
-                                os.chmod(askpass_path, os.stat(askpass_path).st_mode | stat.S_IEXEC)
-                                
-                                # Prepare environment for git commands
-                                git_env = os.environ.copy()
-                                git_env["GIT_ASKPASS"] = askpass_path
-                                git_env["GIT_TERMINAL_PROMPT"] = "0"
+                            # 2. Build the authenticated URL
+                            repo_url = "github.com/chrismwangi022-beep/Christopher-s-Arrears-Analysis-System.git"
+                            remote_url = f"https://{token.strip()}@{repo_url}"
 
-                                # Set user identity for the automated commit
-                                with repo.config_writer() as cw:
-                                    cw.set_value("user", "name", "Spread Capital Admin")
-                                    cw.set_value("user", "email", "admin@spreadcapital.com")
+                            # 3. Add and Commit files
+                            repo.index.add(["data/"])  # Adds all files in the data folder
+                            repo.index.commit("Daily Arrears Update via Web Portal")
 
-                                # 1. Lightweight Fetch & Connectivity Check
-                                # Updates remote-tracking branches without touching local working tree
-                                st.info("Verifying remote connectivity...")
-                                origin.fetch(env=git_env)
+                            # 4. Push to main
+                            origin = repo.remote(name='origin')
+                            origin.set_url(remote_url)
 
-                                # 2. Stage changes
-                                st.info("Staging changes...")
-                                repo.git.add(A=True)
-                                
-                                # 3. Commit changes if dirty
-                                if repo.is_dirty(untracked_files=True):
-                                    st.info("Committing changes...")
-                                    repo.index.commit(f"Auto-upload via Web Portal {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-                                else:
-                                    st.info("No new changes to commit locally.")
+                            # Push to ensure the cloud version stays in sync
+                            origin.push(refspec='HEAD:main')
 
-                                # 4. Push to GitHub
-                                st.info("Pushing to GitHub...")
-                                repo.git.push('origin', 'HEAD:main', env=git_env)
+                            git_success_message = "🚀 GitHub Repository Updated Successfully!"
 
-                                git_success_message = "🚀 GitHub Repository Updated Successfully!"
+                        except git.exc.GitCommandError as e:
+                            if "nothing to commit" in str(e):
+                                git_success_message = "No new file changes to push to GitHub."
+                            else:
+                                git_error_message = f"🔥 Git Error: {str(e)}"
+                        except Exception as e:
+                            git_error_message = f"🔥 Git Error: {str(e)}"
 
-                            except git.GitCommandError as e:
-                                # Sanitize output to prevent token exposure
-                                err_msg = str(e).replace(str(token), "********")
-                                if "nothing to commit" in err_msg.lower():
-                                    git_success_message = "No new file changes to push to GitHub."
-                                else:
-                                    if "rebase" in err_msg.lower():
-                                        try: repo.git.rebase("--abort")
-                                        except: pass
-                                    git_error_message = f"🔥 Git Error: {err_msg}"
-                            except Exception as e:
-                                # Sanitize output to prevent token exposure
-                                err_msg = str(e).replace(str(token), "********")
-                                git_error_message = f"🔥 Git Error: {err_msg}"
-                            finally:
-                                pass
-
-                    # Combine messages
+                    # Combine messages and rerun
                     local_save_msg = f"✅ Saved {saved_count} files locally."
                     git_msg = git_success_message or git_error_message
                     final_msg = f"{local_save_msg} | {git_msg}" if git_msg else local_save_msg
-
-                    # 2. Store success message immediately after upload
                     st.session_state.upload_success = final_msg
-                    st.toast("Portfolio Updated Successfully")
+                    st.toast("Reloading all data...")
+                    st.cache_data.clear()
                     st.rerun()
-
+                
                 elif skipped_count > 0:
                     st.sidebar.warning(f"Skipped {skipped_count} files (Overwrite not selected).")
                 
@@ -772,160 +386,70 @@ def main():
     
     col1, col2, col3, col4, col5 = st.columns(5)
     
-    with PerformanceTimer("KPI Metrics Calculation"):
-        # Enforce Architectural Rule: Move all KPI math to src/calculations.py
-        metrics = get_standard_metrics_package(df_display, df)
+    total_arrears = df_display['Arrears'].sum()
+    total_portfolio = df_display['Principle'].sum() if 'Principle' in df_display.columns else df_display['TotalBalance'].sum()
+    accounts_in_arrears = len(df_display[df_display['Days'].notna() & (df_display['Days'] > 0)])
+    avg_days = df_display[df_display['Days'].notna() & (df_display['Days'] > 0)]['Days'].mean() or 0
+    par_percentage = calculate_par_percentage(df_display)
     
-    # Debug Logs for Production Monitoring (Visibility in Streamlit Cloud logs)
-    print(f"DEBUG: Data Context - Display: {len(df_display)} rows, Full: {len(df)} rows")
-    print(f"DEBUG: Metrics Check - Arrears: {metrics.get('total_arrears', 'MISSING')}")
-
-    total_arrears = metrics["total_arrears"]
-    total_portfolio = metrics["total_portfolio"]
-    accounts_in_arrears = metrics["accounts_in_arrears"]
-    avg_days = metrics["average_days_past_due"]
-    par_percentage = metrics["par_percentage"]
-
     # 1. Total Arrears
     with col1:
         st.markdown(f"""
         <div class="kpi-card">
-            <div class="kpi-value-container">
-                <span class="kpi-currency">{CURRENCY_SYMBOL}</span>
-                <span class="kpi-value">{total_arrears:,.0f}</span>
-            </div>
+            <div class="kpi-value">{CURRENCY_SYMBOL} {total_arrears:,.0f}</div>
             <div class="kpi-label">Total Arrears</div>
         </div>
         """, unsafe_allow_html=True)
-
+    
     # 2. Defaulters (Accounts in Arrears)
     with col2:
         st.markdown(f"""
         <div class="kpi-card">
-            <div class="kpi-value-container">
-                <span class="kpi-value">{accounts_in_arrears:,}</span>
-            </div>
+            <div class="kpi-value">{accounts_in_arrears:,}</div>
             <div class="kpi-label">Defaulters (Accounts in Arrears)</div>
         </div>
         """, unsafe_allow_html=True)
-
+    
     # 3. Average Days Past Due
     with col3:
         st.markdown(f"""
         <div class="kpi-card">
-            <div class="kpi-value-container">
-                <span class="kpi-value">{avg_days:.1f}</span>
-            </div>
+            <div class="kpi-value">{avg_days:.1f}</div>
             <div class="kpi-label">Average Days Past Due</div>
         </div>
         """, unsafe_allow_html=True)
-
+    
     # 4. PAR %
     with col4:
         st.markdown(f"""
         <div class="kpi-card">
-            <div class="kpi-value-container">
-                <span class="kpi-value">{par_percentage:.2f}%</span>
-            </div>
+            <div class="kpi-value">{par_percentage:.2f}%</div>
             <div class="kpi-label">PAR %</div>
         </div>
         """, unsafe_allow_html=True)
-
+    
     # 5. Total Principal
     with col5:
         st.markdown(f"""
         <div class="kpi-card">
-            <div class="kpi-value-container">
-                <span class="kpi-currency">{CURRENCY_SYMBOL}</span>
-                <span class="kpi-value">{total_portfolio:,.0f}</span>
-            </div>
+            <div class="kpi-value">{CURRENCY_SYMBOL} {total_portfolio:,.0f}</div>
             <div class="kpi-label">Total Principal</div>
         </div>
         """, unsafe_allow_html=True)
     
     st.markdown("---")
-
-    st.subheader("🤖 AI Portfolio Insights")
     
-    if 'ai_results' not in st.session_state:
-        st.session_state.ai_results = None
-
-    if st.button("🚀 Start AI Analysis"):
-        with st.spinner("🤖 Analyzing portfolio..."):
-            try:
-                results = generate_ai_insights(metrics)
-                st.session_state.ai_results = results
-                
-                # Detection: Check for the specific local mode string in any return value
-                is_local = any("(Local Analysis Mode)" in str(v) for k, v in results.items())
-                
-                if is_local and ai_health["status"] != "Offline":
-                    ai_health.update({
-                        "status": "Fallback",
-                        "is_local": True,
-                        "error": "Last attempt failed. Check API Quotas."
-                    })
-                else:
-                    ai_health.update({
-                        "status": "Online",
-                        "is_local": False,
-                        "error": "",
-                        "last_success": datetime.now().strftime("%H:%M:%S")
-                    })
-                
-                # Force a rerun so the sidebar badge updates immediately to match the new results
-                st.rerun()
-                
-                st.success("✅ Analysis Complete")
-            except Exception as e:
-                ai_health.update({"status": "Offline", "error": str(e)})
-                st.error(f"AI System Error: {str(e)}")
-
-    if st.session_state.ai_results:
-        ai_results = st.session_state.ai_results
-        if "executive_summary" in ai_results:
-            st.markdown(ai_results["executive_summary"])
-        
-        tab_risk, tab_forecast, tab_rec, tab_branch_ai = st.tabs(["🛡️ Risk AI", "🔮 Forecast AI", "🛠️ Recovery AI", "🏢 Branch AI"])
-        with tab_risk:
-            st.markdown(ai_results.get("risk", "Interpretation pending..."))
-        with tab_forecast:
-            st.markdown(ai_results.get("forecast", "Future projections pending..."))
-        with tab_rec:
-            st.markdown(ai_results.get("recovery", "Operation strategy pending..."))
-        with tab_branch_ai:
-            st.markdown(ai_results.get("branch", "Branch intelligence pending..."))
-            
-        st.markdown("---")
-        st.caption(f"🤖 Multi-Agent Orchestrator · Active Agents: {len(ai_results)}")
-
-    st.markdown("---")
-    
-    # --- Robust Preprocessing for Visualization ---
-    # We create a deep copy to ensure no mutation and enforce numeric types
-    chart_df = df_display.copy()
-    
-    numeric_cols = ['Arrears', 'Principle', 'Days', 'TotalBalance']
-    for col in numeric_cols:
-        if col in chart_df.columns:
-            chart_df[col] = pd.to_numeric(chart_df[col], errors='coerce').fillna(0)
-    
-    if 'Report_Date' in chart_df.columns:
-        chart_df['Report_Date'] = pd.to_datetime(chart_df['Report_Date'], errors='coerce')
-
     # Charts Section
     st.subheader("📊 Portfolio Analysis Charts")
 
-    if not HAS_PLOTLY:
-        st.error("Plotly is not installed. Visual charts are currently unavailable.")
-        return
+    
     
     col_chart1, col_chart2 = st.columns(2)
     
     with col_chart1:
         # Arrears by Branch
-        branch_totals = get_branch_arrears_summary(chart_df)
-        if not branch_totals.empty and branch_totals.sum() > 0:
+        branch_totals = df_display.groupby('Branch')['Arrears'].sum().sort_values(ascending=False)
+        if not branch_totals.empty:
             fig_branch = go.Figure(data=[
                 go.Bar(
                     x=branch_totals.index,
@@ -938,17 +462,17 @@ def main():
             grand_total = branch_totals.sum()
             fig_branch.update_layout(
                 title=f"Arrears by Branch<br><sub>Grand Total Arrears: {CURRENCY_SYMBOL} {grand_total:,.0f}</sub>",
+                xaxis_title="Branch",
+                yaxis_title="Arrears Amount",
                 height=400,
                 dragmode='pan',
             )
             st.plotly_chart(fig_branch, use_container_width=True, config={'scrollZoom': False})
-        else:
-            st.warning("No branch-wise arrears data available for plotting.")
     
     with col_chart2:
         # Arrears by Product - Pie chart (JENGA vs DUMISHA vs others)
-        product_totals = get_product_arrears_summary(chart_df)
-        if not product_totals.empty and product_totals['Arrears'].sum() > 0:
+        product_totals = df_display.groupby('Product')['Arrears'].sum().reset_index()
+        if not product_totals.empty:
             # Highlight JENGA and DUMISHA explicitly, others remain separate
             fig_product = px.pie(
                 product_totals,
@@ -963,16 +487,14 @@ def main():
             )
             fig_product.update_layout(dragmode='pan')
             st.plotly_chart(fig_product, use_container_width=True, config={'scrollZoom': False})
-        else:
-            st.warning("No product-wise arrears data available for plotting.")
 
     
     
     # Arrears by Aging
     st.subheader("Arrears by Aging Buckets")
-    aging_totals = get_aging_arrears_summary(chart_df)
+    aging_totals = df_display.groupby('Aging_Bucket')['Arrears'].sum()
     
-    if not aging_totals.empty and aging_totals.sum() > 0:
+    if not aging_totals.empty:
         # Color mapping for aging buckets
         color_map = {
             'Early Warning (1-30)': COLORS['accent_yellow'],
@@ -981,24 +503,26 @@ def main():
             'Critical (>90)': COLORS['accent_red'],
             'Current': '#90EE90'
         }
-        fig_aging = px.bar(
-            x=aging_totals.index,
-            y=aging_totals.values,
-            text=[f"{CURRENCY_SYMBOL} {val:,.0f}" for val in aging_totals.values],
-            color=aging_totals.index,
-            color_discrete_map=color_map,
-            labels={'x': 'Aging Bucket', 'y': 'Arrears Amount'}
-        )
-        fig_aging.update_traces(textposition='outside')
+        colors = [color_map.get(bucket, COLORS['accent_cyan']) for bucket in aging_totals.index]
+        
+        fig_aging = go.Figure(data=[
+            go.Bar(
+                x=aging_totals.index,
+                y=aging_totals.values,
+                marker_color=colors,
+                text=[f"{CURRENCY_SYMBOL} {val:,.0f}" for val in aging_totals.values],
+                textposition='outside',
+            )
+        ])
         grand_total = aging_totals.sum()
         fig_aging.update_layout(
             title=f"Arrears by Aging Buckets<br><sub>Grand Total Arrears: {CURRENCY_SYMBOL} {grand_total:,.0f}</sub>",
+            xaxis_title="Aging Bucket",
+            yaxis_title="Arrears Amount",
             height=400,
             dragmode='pan',
         )
         st.plotly_chart(fig_aging, use_container_width=True, config={'scrollZoom': False})
-    else:
-        st.info("No arrears found in aging buckets to display.")
     
     st.markdown("---")
     
@@ -1062,7 +586,7 @@ def main():
     cols_to_show = [c for c in cols_to_show if c in worklist_df.columns]
     
     # Separate tabs for different action types
-    tab_call, tab_visit, tab_recovery = st.tabs(["Call Backs", "Visits", "Recovery"])
+    tab_call, tab_visit, tab_recovery = st.tabs(["Call Backs (1–30 days)", "Physical Visits (31–90 days)", "Recovery Escalations (>90 days)"])
     
     def render_worklist_tab(df_tab, label_prefix: str):
         """Render table + CSV/Excel export buttons for a given worklist slice."""
@@ -1110,65 +634,61 @@ def main():
     
     st.markdown("---")
     
-    # 🎯 Performance Rankings & Insights
+    # Performance Rankings & Insights
     st.subheader("🎯 Performance Rankings & Insights")
-    st.caption("Relative ranking compares entities against peers, while status reflects absolute portfolio health.")
     
-    # Global High-Risk Metrics
-    m_col1, m_col2, m_col3 = st.columns(3)
-    with m_col1:
+    col_rank1, col_rank2 = st.columns(2)
+    
+    with col_rank1:
+        st.markdown("### Top Risk Branch")
         top_branch = get_top_risk_branch(df_display)
         if top_branch:
-            st.metric("Highest Risk Branch", top_branch[0].title(), f"{top_branch[1]:.1%}")
-    with m_col2:
+            branch_name, branch_amount = top_branch
+            st.metric("Branch", branch_name.title(), f"{CURRENCY_SYMBOL} {branch_amount:,.0f}")
+        
+        st.markdown("### Top Risk Product")
         top_product = get_top_risk_product(df_display)
         if top_product:
-            st.metric("Highest Risk Product", top_product[0], f"{top_product[1]:.1%}")
-    with m_col3:
-        st.metric("Overall Portfolio PAR", f"{calculate_par_percentage(df_display):.2f}%")
-
-    tab_branch, tab_officer = st.tabs(["🏢 Branch Rankings", "👤 Officer Rankings"])
+            product_name, product_ratio = top_product
+            st.metric("Product", product_name, f"Ratio: {product_ratio:.2%}")
     
-    # Formatting configuration for tables
-    table_config = {
-        "Arrears": st.column_config.NumberColumn(format=f"{CURRENCY_SYMBOL} %,.0f"),
-        "Principal": st.column_config.NumberColumn(format=f"{CURRENCY_SYMBOL} %,.0f"),
-        "Risk_Ratio": st.column_config.NumberColumn("Ratio %", format="%.1%"),
-        "Classification": st.column_config.TextColumn("Status")
-    }
-
-    with tab_branch:
-        branch_perf = get_branch_performance(df_display)
-        if not branch_perf.empty:
-            st.markdown("#### 🔴 Highest Risk Branches (Relative Ranking)")
-            st.dataframe(branch_perf.head(5), use_container_width=True, column_config=table_config, hide_index=True)
-            
-            # Requirement 4: Validation check for multiple branches
-            if len(branch_perf) > 1:
-                st.markdown("#### 🟢 Lowest Risk Branch (Relative Ranking)")
-                st.dataframe(branch_perf.tail(5).sort_values('Risk_Ratio', ascending=True), use_container_width=True, column_config=table_config, hide_index=True)
-            
-            with st.expander("View Full Branch League Table"):
-                st.dataframe(branch_perf, use_container_width=True, column_config=table_config, hide_index=True)
-
-    with tab_officer:
+    with col_rank2:
+        st.markdown("### Officer Performance – Praise vs Improve")
         officer_perf = get_officer_performance(df_display)
         if not officer_perf.empty:
-            st.markdown("#### 🔴 Highest Risk Officers (Relative Ranking)")
-            st.dataframe(officer_perf.head(5), use_container_width=True, column_config=table_config, hide_index=True)
+            # Best 5 (praise) and worst 5 (needs improvement)
+            best = officer_perf.nsmallest(5, 'Ratio')
+            worst = officer_perf.nlargest(5, 'Ratio')
             
-            # Requirement 4: Validation check for multiple officers
-            if len(officer_perf) > 1:
-                st.markdown("#### 🟢 Lowest Risk Officers (Relative Ranking)")
-                st.dataframe(officer_perf.tail(5).sort_values('Risk_Ratio', ascending=True), use_container_width=True, column_config=table_config, hide_index=True)
-
-            with st.expander("View Full Officer League Table"):
-                st.dataframe(officer_perf, use_container_width=True, column_config=table_config, hide_index=True)
-
-    # Branch-Specific Insights
-    st.markdown("---")
-    render_branch_intelligence(df_display, df, selected_branches)
-
+            tab_best, tab_worst = st.tabs(["👏 Officers to Praise", "⚠️ Officers Needing Improvement"])
+            
+            with tab_best:
+                st.dataframe(
+                    best[['Officer', 'Arrears', 'Principle', 'Ratio']].rename(columns={
+                        'Ratio': 'Arrears/Portfolio Ratio'
+                    }),
+                    use_container_width=True,
+                )
+            
+            with tab_worst:
+                st.dataframe(
+                    worst[['Officer', 'Arrears', 'Principle', 'Ratio']].rename(columns={
+                        'Ratio': 'Arrears/Portfolio Ratio'
+                    }),
+                    use_container_width=True,
+                )
+    
+    # Dynamic Branch Insights
+    if selected_branches and len(selected_branches) == 1:
+        branch = selected_branches[0]
+        risk_pct = get_branch_risk_percentage(df, branch)
+        main_product = get_main_driver_product_in_branch(df_display, branch)
+        
+        st.markdown("### Branch-Specific Insights")
+        st.info(f"**Branch {branch.title()}** currently holds **{risk_pct:.2f}%** of total portfolio risk.")
+        if main_product:
+            st.info(f"**Recommendation:** Immediate focus on **{main_product}**, which is the main driver of arrears in this branch.")
+    
     # Portfolio Distribution by Aging
     st.markdown("---")
     st.subheader("📈 Portfolio Distribution by Aging Buckets")
@@ -1195,192 +715,60 @@ def main():
         fig_pie.update_layout(dragmode='pan')
         st.plotly_chart(fig_pie, use_container_width=True, config={'scrollZoom': False})
 
-    # ────────────────────────────────────────────────────────
-    # NEW TREND ANALYSIS MODULE (REBUILT FROM SCRATCH)
-    # ────────────────────────────────────────────────────────
+    # --- REFACTOR: Consolidated Trend Analysis Section ---
     st.markdown("---")
-    st.subheader("📈 Temporal Portfolio Trends")
+    st.subheader("📈 Trend Analysis")
+    group_choice = st.radio("Group Trends By:", ["Branch", "Loan_Officer", "Product"], horizontal=True, key="trend_group")
 
-    # 1. Source Data Preparation (Master Dataframe)
-    # We use 'df' (full history) instead of 'df_display' (single date)
-    trend_source = df.copy()
-
-    # 2. Entity Filter Application (Ignoring Date Range Filter)
+    # Build trend dataframe from the full dataset (df), but apply the entity filters from the sidebar.
+    # This ignores the date filter to show historical trends for the selected entities.
+    df_trend = df.copy()
     if selected_branches and "All" not in selected_branches:
-        trend_source = trend_source[trend_source['Branch'].isin(selected_branches)]
+        df_trend = df_trend[df_trend['Branch'].isin(selected_branches)]
     if selected_officers and "All" not in selected_officers:
-        trend_source = trend_source[trend_source['Loan_Officer'].isin(selected_officers)]
+        df_trend = df_trend[df_trend['Loan_Officer'].isin(selected_officers)]
     if selected_products and "All" not in selected_products:
-        trend_source = trend_source[trend_source['Product'].isin(selected_products)]
+        df_trend = df_trend[df_trend['Product'].isin(selected_products)]
 
-    # 3. Data Integrity & Cleaning
-    if 'Report_Date' in trend_source.columns:
-        trend_source['Report_Date'] = pd.to_datetime(trend_source['Report_Date'], errors='coerce')
-        trend_source = trend_source.dropna(subset=['Report_Date'])
-        trend_source['Arrears'] = pd.to_numeric(trend_source['Arrears'], errors='coerce').fillna(0)
+    if 'Report_Date' in df_trend.columns:
+        df_trend = df_trend.copy()
+        df_trend['Report_Date'] = pd.to_datetime(df_trend['Report_Date'], errors='coerce')
+        df_trend = df_trend.dropna(subset=['Report_Date'])
 
-        # 4. Dimension Selection
-        trend_dimension = st.radio(
-            "Trend Segmentation:", 
-            ["Branch", "Loan_Officer", "Product"], 
-            horizontal=True, 
-            key="trend_dimension_selector"
-        )
+        trend_grp = df_trend.groupby([pd.Grouper(key='Report_Date', freq='D'), group_choice])['Arrears'].sum().reset_index()
 
-        # 5. Diagnostics Display
-        unique_dates = trend_source['Report_Date'].dt.date.unique()
-        n_groups = trend_source[trend_dimension].nunique()
+        # If 'All' selected and too many entities, limit to top 10 by total arrears
+        selected_list_map = {"Branch": selected_branches, "Loan_Officer": selected_officers, "Product": selected_products}
+        selected_list = selected_list_map.get(group_choice)
 
-        st.caption("🔍 Temporal Intelligence Diagnostics")
-        diag_col1, diag_col2, diag_col3, diag_col4, diag_col5 = st.columns(5)
-        diag_col1.metric("Rows Found", f"{len(trend_source):,}")
-        diag_col2.metric("Date Points", len(unique_dates))
-        diag_col3.metric("Earliest Date", str(min(unique_dates)) if len(unique_dates) > 0 else "N/A")
-        diag_col4.metric("Latest Date", str(max(unique_dates)) if len(unique_dates) > 0 else "N/A")
-        diag_col5.metric("Groups", n_groups)
+        if selected_list is not None and "All" in selected_list:
+            # compute top entities by total arrears
+            totals = df_trend.groupby(group_choice)['Arrears'].sum().nlargest(10)
+            top_entities = totals.index.tolist()
+            if trend_grp[group_choice].nunique() > 10:
+                trend_grp = trend_grp[trend_grp[group_choice].isin(top_entities)]
 
-        with st.expander("📊 View Data Density per Report Date"):
-            density_df = trend_source.groupby(trend_source['Report_Date'].dt.date).size().reset_index(name='Rows per Report_Date')
-            st.dataframe(density_df.sort_values('Report_Date', ascending=False), use_container_width=True, hide_index=True)
-
-        # 6. Aggregation Logic
-        trend_data_agg = trend_source.groupby(['Report_Date', trend_dimension])['Arrears'].sum().reset_index()
-
-        # 7. Visualization (Plotly Line Chart)
-        if not trend_data_agg.empty:
-            fig_trend = px.line(
-                trend_data_agg,
-                x='Report_Date',
-                y='Arrears',
-                color=trend_dimension,
-                title=f"Historical Arrears Exposure by {trend_dimension}",
-                markers=True,
-                labels={'Arrears': f'Arrears ({CURRENCY_SYMBOL})', 'Report_Date': 'Timeline'},
-                template="plotly_dark"
-            )
-            fig_trend.update_layout(
-                hovermode="x unified",
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                margin=dict(l=0, r=0, t=80, b=0),
-                height=500
-            )
-            st.plotly_chart(fig_trend, use_container_width=True)
+        if not trend_grp.empty:
+            try:
+                palette = [COLORS['accent_cyan'], COLORS['accent_orange'], COLORS['accent_amber'], COLORS['accent_red'], COLORS['accent_yellow']]
+                fig_daily = px.line(
+                    trend_grp,
+                    x='Report_Date',
+                    y='Arrears',
+                    color=group_choice,
+                    markers=True,
+                    color_discrete_sequence=palette,
+                )
+                fig_daily.update_traces(hovertemplate=f"%{{x}}<br>Arrears: {CURRENCY_SYMBOL} %{{y:,.0f}}<extra></extra>")
+                fig_daily.update_layout(height=450, template='plotly_dark', title=f'Arrears Movement Over Time by {group_choice}', dragmode='pan')
+                st.plotly_chart(fig_daily, use_container_width=True, config={'scrollZoom': False})
+            except Exception as e:
+                st.error(f"Error plotting trend analysis: {e}")
         else:
-            st.info("Insufficient historical data available for visualization with current filters.")
+            st.info("No historical data available for the selected filters to plot trends.")
     else:
-        st.error("Historical Trend Analysis requires a 'Report_Date' column in the dataset.")
+        st.info("No `Report_Date` column in dataset; cannot plot trends.")
     
-    # --- 📡 Branch Recovery Radar Integration ---
-    # Placement: Below Trend Analysis, Above Weekly Report.
-    # Visibility: Only renders when exactly one branch is selected.
-    if len(selected_branches) == 1 and "All" not in selected_branches:
-        branch_name = selected_branches[0]
-        
-        # Initialize cache if missing to prevent attribute errors
-        if "weekly_reports_cache" not in st.session_state:
-            st.session_state["weekly_reports_cache"] = {}
-            
-        # NEW RECOVERY ENGINE INTEGRATION - Cache Key with Data Integrity Hash
-        now = pd.Timestamp.now().normalize()
-        monday_date = (now - pd.Timedelta(days=now.weekday())).strftime('%Y-%m-%d')
-        # Generate hash to detect if underlying data has changed
-        df_hash = hashlib.md5(pd.util.hash_pandas_object(df_display, index=True).values.tobytes()).hexdigest()
-        cache_key = f"{branch_name}_{monday_date}_{df_hash}"
-        
-        report_result = st.session_state["weekly_reports_cache"].get(cache_key)
-
-        st.markdown("---")
-
-        # NEW RECOVERY ENGINE INTEGRATION - Structured Radar Feed
-        if report_result and report_result.get("structured_report"):
-            struct = report_result["structured_report"]
-            with st.container(border=True):
-                st.markdown("### 📡 Branch Intelligence Feed")
-                r_col1, r_col2 = st.columns(2)
-                with r_col1:
-                    # High priority alerts from operational intelligence
-                    alerts = struct.get("operational_alerts", [])
-                    if alerts:
-                        st.markdown("**🚨 Priority Alerts**")
-                        for item in alerts: st.info(item)
-                    
-                    # Watchlist derived from high-risk officer statuses
-                    watchlist = [off.get("name") for off in struct.get("officer_risks", []) 
-                                 if "Needs attention" in off.get("status", "") or "Critical" in off.get("status", "")]
-                    if watchlist:
-                        st.markdown("**👁️ Officer Watchlist**")
-                        for item in watchlist: st.warning(item)
-                with r_col2:
-                    # Operational concerns derived from recovery priorities
-                    concerns = struct.get("recovery_actions", [])
-                    if concerns:
-                        st.markdown("**⚠️ Operational Concerns**")
-                        for item in concerns: st.error(item)
-                    
-                    # Positive signals for high performing officers
-                    signals = [off.get("name") for off in struct.get("officer_risks", []) 
-                               if "Improving" in off.get("status", "")]
-                    if signals:
-                        st.markdown("**✅ Positive Signals**")
-                        for item in signals: st.success(item)
-
-        # --- 🚨 Weekly Recovery Intelligence Report Section ---
-        st.subheader("🚨 Weekly Recovery Intelligence Report")
-
-        col_ai1, col_ai2 = st.columns(2)
-        with col_ai1:
-            if st.button("🚀 Generate Weekly Report (Recovery Engine)", use_container_width=True):
-                with st.spinner(f"📡 Accessing Recovery Command for {branch_name}..."):
-                    try:
-                        # NEW RECOVERY ENGINE INTEGRATION - Local Import for safety
-                        from src.builder import build_weekly_recovery_report
-                        report_result = build_weekly_recovery_report(branch_name, df_display, df)
-                        st.session_state["weekly_reports_cache"][cache_key] = report_result
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Recovery Engine Error: {str(e)}")
-
-        with col_ai2:
-            if report_result:
-                if st.button("♻️ Regenerate Report", use_container_width=True):
-                    with st.spinner("Refreshing intelligence..."):
-                        # NEW RECOVERY ENGINE INTEGRATION - Local Import for safety
-                        from src.builder import build_weekly_recovery_report
-                        st.session_state["weekly_reports_cache"][cache_key] = build_weekly_recovery_report(branch_name, df_display, df)
-                        st.rerun()
-
-        # NEW RECOVERY ENGINE INTEGRATION - Rendering & Diagnostics
-        if report_result:
-            # Markdown formatted output for high-quality dashboard display
-            st.markdown(report_result.get("rendered_report", "### ⚠️ Report Rendering Unavailable"))
-            
-            # Preservation of WhatsApp Copy functionality
-            st.text_area(
-                label="Field Communication (WhatsApp Copy)",
-                value=report_result.get("structured_report", {}).get("whatsapp_summary", "No summary generated."),
-                height=400,
-                key="recovery_report_text"
-            )
-            
-            # Metadata and Diagnostics for system transparency
-            with st.expander("🛠️ Intelligence Diagnostics & Validation"):
-                meta = report_result.get("metadata", {})
-                d_col1, d_col2 = st.columns(2)
-                with d_col1:
-                    st.write(f"**Generation Time:** {meta.get('generation_time', 'N/A')}")
-                    st.write(f"**Validation Status:** {'✅ Passed' if meta.get('validation_status') else '❌ Failed'}")
-                    st.write(f"**AI Mode:** {meta.get('ai_status', 'N/A')}")
-                with d_col2:
-                    st.write(f"**Processing Duration:** {meta.get('processing_duration_seconds', 0):.4f}s")
-                    st.write(f"**Cache Status:** Active (Data-State Matched)")
-                    st.write(f"**Engine Version:** {meta.get('engine_version', 'N/A')}")
-                
-                if report_result.get("validation_errors"):
-                    st.error(f"Validation Issues: {', '.join(report_result['validation_errors'])}")
-
-    # Footer Section - Branding Divider & Caption
-    st.markdown("---")
-    # Removed previous footer branding and its separator
 
 if __name__ == "__main__":
     main()

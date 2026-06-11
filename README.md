@@ -1,3 +1,6 @@
+# Christopher-s-Arrears-Analysis-System
+Christopher's Arrears Analysis System is a high-performance, cloud-integrated financial analytics web application built with Streamlit. This system transforms raw portfolio data into actionable recovery insights providIing portfolio managers with real-time visibility into arrears movement, risk distribution, and loan officer performance.
+=======
 # Spread Capital - Arrears Analysis System
 
 A comprehensive Streamlit-based dashboard for analyzing loan arrears and portfolio risk with high-level Portfolio Intelligence.
@@ -5,7 +8,6 @@ A comprehensive Streamlit-based dashboard for analyzing loan arrears and portfol
 ## Features
 
 ### 📊 Key Performance Indicators (KPIs)
-
 - **Total Arrears**: Sum of all outstanding arrears
 - **Defaulters**: Count of accounts in arrears (Days > 0)
 - **Average Days Past Due**: Mean days in arrears across defaulted accounts
@@ -13,14 +15,12 @@ A comprehensive Streamlit-based dashboard for analyzing loan arrears and portfol
 - **Total Principal**: Total portfolio value (Principle)
 
 ### 📈 Interactive Charts
-
 - **Arrears by Branch**: Bar chart with total labels on bars and Grand Total annotation
 - **Arrears by Product**: Pie chart with JENGA vs DUMISHA vs other products, showing value and percentage
 - **Arrears by Aging Buckets**: Color-coded bar chart for 0-30, 31-60, 61-90, and 90+ days (Current, Early Warning, Moderate, Warning, Critical)
 - **Portfolio Distribution**: Pie chart showing arrears distribution across aging buckets
 
 ### 🔍 Advanced Filtering (Slicers)
-
 - **Timeline**: Today, Last Week, Last Month, Last Quarter, All Time
 - **Branch**: Multi-select filter
 - **Loan Officer**: Multi-select filter
@@ -28,7 +28,6 @@ A comprehensive Streamlit-based dashboard for analyzing loan arrears and portfol
 - **Aging Buckets**: Multi-select (1-30, 31-60, 61-90, 90+)
 
 ### 📊 Strategic Portfolio Recommendations
-
 AI-powered recommendations organized by priority bands:
 
 | Priority | Days Past Due | Action |
@@ -44,14 +43,12 @@ Each priority band shows:
 - Top 5 accounts by arrears amount
 
 ### 🎯 Performance Rankings & Insights
-
 - **Top Risk Branch**: Branch with highest total arrears
 - **Top Risk Product**: Product with highest arrears-to-portfolio ratio
 - **Star Performers**: Top 5 officers with lowest arrears-to-portfolio ratio
 - **Branch-Specific Insights**: Dynamic recommendations when a single branch is selected
 
 ### 📈 Portfolio Distribution Analysis
-
 - Breakdown by aging buckets (1-30, 31-60, 61-90, 90+)
 - Account count per bucket
 - Total arrears per bucket
@@ -72,7 +69,6 @@ Each priority band shows:
 ## Configuration
 
 ### Data Source Path
-
 The system reads data from:
 ```
 C:\Users\ADMIN\Desktop\Christopher\Arrears Reports\Arears Reports formating folder\Documents
@@ -180,3 +176,4 @@ Proprietary - Spread Capital
 ## Support
 
 For issues or questions, contact the development team.
+>>>>>>> 3a66b03 (Add gitignore to protect secrets)

@@ -19,7 +19,6 @@ Your Spread Capital Arrears Analysis System has been successfully upgraded for c
 ## Files Created
 
 ### 1. **src/google_drive_handler.py** (NEW)
-
 A complete Google Drive client handler with:
 - Service account authentication via st.secrets
 - File upload functionality (supports Excel, CSV, DataFrames)
@@ -73,7 +72,6 @@ Quick reference guide with:
 ## Files Updated
 
 ### 1. **app.py** (MAJOR UPDATE)
-
 **Changes**:
 - Added `process_uploaded_file` import from data_loader
 - Added `get_drive_handler` import for Google Drive integration
@@ -155,7 +153,6 @@ python-dotenv>=1.0.0
 ## New Features
 
 ### 1. File Upload Interface
-
 ```
 📁 Data Source Section
 ├── File Uploader (CSV/Excel)
