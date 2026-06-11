@@ -1,3 +1,2 @@
-"""
-Spread Capital Analysis System - Core Package
-"""
+# Spread Capital Arrears Analysis System
+__version__ = "1.0.0"

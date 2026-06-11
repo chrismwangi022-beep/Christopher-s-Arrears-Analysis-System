@@ -18,7 +18,6 @@ from .constants import (
     HEADER_KEYWORDS,
 )
 
-MASTER_DATASET_PATH = os.path.join("data", "master_dataset.parquet")
 
 def detect_column_by_pattern(df: pd.DataFrame, patterns: List[str], default_col: Optional[int] = None) -> Optional[int]:
     """Detect column index by matching header patterns."""
@@ -389,6 +388,7 @@ def process_uploaded_file(uploaded_file, branch_name: Optional[str] = None) -> p
     except Exception as e:
         print(f"Error processing uploaded file: {e}")
         return pd.DataFrame()
+<<<<<<< HEAD
 
 def load_master_dataset() -> pd.DataFrame:
     """
@@ -441,3 +441,5 @@ def append_to_master_dataset(new_df: pd.DataFrame):
     else:
         new_df.to_parquet(MASTER_DATASET_PATH, index=False, engine='pyarrow')
         print(f"DEBUG: Master dataset created at {MASTER_DATASET_PATH} with initial records.")
+=======
+>>>>>>> 3258ac82436e9a50182a85b57be838f9bfc52beb
