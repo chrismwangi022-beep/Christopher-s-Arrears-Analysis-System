@@ -668,3 +668,25 @@ def get_product_risk_matrix(df: pd.DataFrame) -> pd.DataFrame:
         
     stats['Risk Level'] = stats['Arrears'].apply(determine_risk)
     return stats.sort_values('Arrears', ascending=False)
+
+def get_branch_detailed_stats(df: pd.DataFrame, branch_name: str) -> Dict:
+    """Calculates detailed metrics for a specific branch."""
+    branch_df = df[df['Branch'] == branch_name]
+    if branch_df.empty:
+        return {}
+    
+    total_arrears = branch_df['Arrears'].sum()
+    global_arrears = df['Arrears'].sum()
+    
+    # Detect main driver
+    product_col = find_column_case_insensitive(branch_df, 'Product')
+    main_driver = branch_df.groupby(product_col)['Arrears'].sum().idxmax() if product_col else "N/A"
+    
+    return {
+        "branch": branch_name,
+        "arrears": total_arrears,
+        "risk_share": (total_arrears / global_arrears * 100) if global_arrears > 0 else 0,
+        "accounts": len(branch_df),
+        "avg_dpd": branch_df['Days'].mean() if 'Days' in branch_df.columns else 0,
+        "main_driver": main_driver
+    }
