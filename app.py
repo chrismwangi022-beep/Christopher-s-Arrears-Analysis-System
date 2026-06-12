@@ -33,6 +33,8 @@ from src.calculations import (
     get_arrears_time_series,
     get_trend_for_entity,
     get_top_movers,
+    get_officer_performance_matrix,
+    get_product_risk_matrix,
 )
 from src.constants import (
     COLORS,

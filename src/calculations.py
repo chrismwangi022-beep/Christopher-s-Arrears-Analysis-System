@@ -602,3 +602,69 @@ def get_priority_band_summary(df: pd.DataFrame) -> pd.DataFrame:
     except Exception as e:
         print(f"Error getting priority band summary: {e}")
         return pd.DataFrame()
+
+
+def get_officer_performance_matrix(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Calculates detailed metrics for loan officers including performance status.
+    """
+    if df.empty:
+        return pd.DataFrame()
+        
+    # Use existing ratio calculation
+    perf_ratios = get_officer_performance(df) # Returns 'Officer', 'Arrears', 'Principle', 'Ratio'
+    
+    # Aggregate additional stats
+    officer_col = find_column_case_insensitive(df, 'Loan_Officer')
+    account_col = find_column_case_insensitive(df, 'AccountID')
+    days_col = find_column_case_insensitive(df, 'Days')
+    
+    stats = df.groupby(officer_col).agg({
+        account_col: 'count',
+        days_col: 'mean'
+    }).reset_index()
+    stats.columns = ['Officer_Name', 'Accounts', 'Avg_DPD']
+    stats['Officer_Name'] = stats['Officer_Name'].astype(str).str.title()
+    
+    # Merge metrics
+    matrix = pd.merge(perf_ratios, stats, left_on='Officer', right_on='Officer_Name')
+    
+    def determine_status(ratio):
+        if ratio > 0.15: return "🔴 Attention"
+        if ratio > 0.05: return "🟠 Monitor"
+        return "🟢 Good"
+        
+    matrix['Performance Status'] = matrix['Ratio'].apply(determine_status)
+    return matrix[['Officer', 'Accounts', 'Arrears', 'Avg_DPD', 'Ratio', 'Performance Status']]
+
+
+def get_product_risk_matrix(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Calculates risk metrics for products.
+    """
+    if df.empty:
+        return pd.DataFrame()
+        
+    product_col = find_column_case_insensitive(df, 'Product')
+    account_col = find_column_case_insensitive(df, 'AccountID')
+    arrears_col = find_column_case_insensitive(df, 'Arrears')
+    days_col = find_column_case_insensitive(df, 'Days')
+    
+    stats = df.groupby(product_col).agg({
+        account_col: 'count',
+        arrears_col: 'sum',
+        days_col: 'mean'
+    }).reset_index()
+    stats.columns = ['Product', 'Accounts', 'Arrears', 'Avg_DPD']
+    
+    total_arr = stats['Arrears'].sum()
+    
+    def determine_risk(val):
+        if total_arr == 0: return "Low"
+        ratio = val / total_arr
+        if ratio > 0.4: return "High"
+        if ratio > 0.1: return "Medium"
+        return "Low"
+        
+    stats['Risk Level'] = stats['Arrears'].apply(determine_risk)
+    return stats.sort_values('Arrears', ascending=False)
