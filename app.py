@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 import sys
 import os
 import io
+import numpy as np
 import git
 
 # Add src to path
@@ -41,6 +42,56 @@ from src.constants import (
     CHART_CONFIG,
     DATA_FOLDER,
 )
+
+def build_action_engine(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Transforms arrears data into a Daily Collections Action Center.
+    Implements weighted priority scoring, banding, and recommended actions.
+    """
+    if df.empty:
+        return pd.DataFrame()
+        
+    action_df = df.copy()
+    
+    # 1. HANDLE EDGE CASES & NORMALIZATION PREP
+    if 'Customer_Name' not in action_df.columns:
+        action_df['Customer_Name'] = action_df.get('MemberName', 'Unknown')
+    if 'Phone_Number' not in action_df.columns:
+        action_df['Phone_Number'] = "N/A"
+
+    action_df['Days'] = pd.to_numeric(action_df['Days'], errors='coerce').fillna(0)
+    action_df['Arrears'] = pd.to_numeric(action_df['Arrears'], errors='coerce').fillna(0)
+    
+    # 2. CREATE A PRIORITY SCORE (Vectorized)
+    max_days = action_df['Days'].max()
+    max_arrears = action_df['Arrears'].max()
+    
+    norm_days = (action_df['Days'] / max_days * 100) if max_days > 0 else action_df['Days'] * 0
+    norm_arrears = (action_df['Arrears'] / max_arrears * 100) if max_arrears > 0 else action_df['Arrears'] * 0
+    
+    action_df['Priority_Score'] = (norm_days * 0.5) + (norm_arrears * 0.5)
+    
+    # 3. CREATE PRIORITY BAND COLUMN
+    score_bins = [0, 20, 50, 80, 101]
+    score_labels = ["🟢 Low", "🟡 Medium", "🟠 High", "🔴 Critical"]
+    action_df['Priority_Band'] = pd.cut(action_df['Priority_Score'], bins=score_bins, labels=score_labels, right=False)
+    
+    # 4. CREATE ACTION COLUMN
+    action_conditions = [
+        (action_df['Days'] > 90), (action_df['Days'] > 30), (action_df['Days'] > 0), (action_df['Days'] <= 0)
+    ]
+    action_values = ["Recovery / Physical Visit", "Call + SMS", "SMS Reminder", "Monitor"]
+    action_df['Action'] = np.select(action_conditions, action_values, default="Monitor")
+    
+    # 5. CREATE SMS_FLAG COLUMN
+    action_df['SMS_FLAG'] = np.where(action_df['Action'].str.contains("SMS"), "YES", "NO")
+    
+    # 6. ENSURE CLEAN OUTPUT DATAFRAME
+    output_cols = [
+        'Customer_Name', 'Phone_Number', 'AccountID', 'Branch', 'Loan_Officer', 
+        'Product', 'Days', 'Arrears', 'Priority_Score', 'Priority_Band', 'Action', 'SMS_FLAG'
+    ]
+    return action_df[output_cols]
 
 # Page configuration
 st.set_page_config(
@@ -259,6 +310,9 @@ def main():
         df_display = df_categorized[df_categorized['Aging_Bucket'].isin(selected_aging)]
     else:
         df_display = df_categorized
+        
+    # 🚀 Run Daily Action Engine
+    action_center_df = build_action_engine(df_display)
     
     # Display filtered record count
     st.sidebar.markdown("---")
@@ -567,34 +621,19 @@ def main():
 
     # Action-level worklist: exactly which account needs what action
     st.markdown("---")
-    st.subheader("🧾 Action-Level Worklist")
-    worklist_df = df_display.copy() # Use the already categorized display dataframe
-    
-    def map_action(bucket: str) -> str:
-        if bucket == "Early Warning (1-30)":
-            return "Call Back / SMS Reminder"
-        if bucket in ["Moderate (31-60)", "Warning (61-90)"]:
-            return "Physical Visit / Site Visit & Guarantor Engagement"
-        if bucket == "Critical (>90)":
-            return "Escalate Recovery Measures / Legal Follow-up"
-        return "Monitor"
-    
-    worklist_df['Recommended_Action'] = worklist_df['Aging_Bucket'].apply(map_action)
-    
-    # Compact view focused on frontline execution
-    cols_to_show = ['AccountID', 'Branch', 'Loan_Officer', 'Product', 'Days', 'Arrears', 'Aging_Bucket', 'Recommended_Action']
-    cols_to_show = [c for c in cols_to_show if c in worklist_df.columns]
+    st.subheader("📞 Daily Collections Action Center")
     
     # Separate tabs for different action types
-    tab_call, tab_visit, tab_recovery = st.tabs(["Call Backs (1–30 days)", "Physical Visits (31–90 days)", "Recovery Escalations (>90 days)"])
+    tab_sms, tab_call, tab_recovery = st.tabs(["SMS Reminders (1-30 days)", "Call + SMS (31-90 days)", "Recovery / Physical Visit (>90 days)"])
     
     def render_worklist_tab(df_tab, label_prefix: str):
         """Render table + CSV/Excel export buttons for a given worklist slice."""
         if df_tab.empty:
-            st.caption(f"No accounts currently in {label_prefix.lower()}.")
+            st.caption(f"No accounts currently requiring {label_prefix.lower()}.")
             return
-        view = df_tab[cols_to_show].copy()
-        st.dataframe(view, use_container_width=True)
+        # Sort by Priority_Score for maximum impact
+        view = df_tab.sort_values(by='Priority_Score', ascending=False)
+        st.dataframe(view, use_container_width=True, hide_index=True)
 
         # --- REFACTOR: Place download buttons side-by-side ---
         dl_col1, dl_col2 = st.columns(2)
@@ -620,17 +659,17 @@ def main():
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             )
 
-    with tab_call:
-        call_df = worklist_df[worklist_df['Recommended_Action'].str.contains("Call Back")]
-        render_worklist_tab(call_df, "Call Back")
+    with tab_sms:
+        sms_df = action_center_df[action_center_df['Action'] == "SMS Reminder"]
+        render_worklist_tab(sms_df, "SMS Reminder")
     
-    with tab_visit:
-        visit_df = worklist_df[worklist_df['Recommended_Action'].str.contains("Physical Visit")]
-        render_worklist_tab(visit_df, "Physical Visit")
+    with tab_call:
+        call_df = action_center_df[action_center_df['Action'] == "Call + SMS"]
+        render_worklist_tab(call_df, "Call + SMS")
     
     with tab_recovery:
-        recovery_df = worklist_df[worklist_df['Recommended_Action'].str.contains("Recovery Measures")]
-        render_worklist_tab(recovery_df, "Recovery Escalation")
+        recovery_df = action_center_df[action_center_df['Action'] == "Recovery / Physical Visit"]
+        render_worklist_tab(recovery_df, "Recovery / Physical Visit")
     
     st.markdown("---")
     
