@@ -704,20 +704,20 @@ def main():
         else:
             top_branch_info = get_top_risk_branch(df_display)
             if top_branch_info:
-            branch_name, _ = top_branch_info
-            b_stats = get_branch_detailed_stats(df_display, branch_name)
-            
-            if b_stats:
-                with st.container():
-                    inner_col1, inner_col2 = st.columns(2)
-                    with inner_col1:
-                        st.metric("Branch", b_stats['branch'].title())
-                        st.metric("Arrears", f"{CURRENCY_SYMBOL} {b_stats['arrears']:,.0f}")
-                        st.metric("Avg DPD", f"{b_stats['avg_dpd']:.1f}")
-                    with inner_col2:
-                        st.metric("Portfolio Risk Share", f"{b_stats['risk_share']:.1f}%")
-                        st.metric("Accounts", f"{b_stats['accounts']:,}")
-                        st.metric("Main Driver", b_stats['main_driver'])
+                branch_name, _ = top_branch_info
+                b_stats = get_branch_detailed_stats(df_display, branch_name)
+                
+                if b_stats:
+                    with st.container():
+                        inner_col1, inner_col2 = st.columns(2)
+                        with inner_col1:
+                            st.metric("Branch", b_stats['branch'].title())
+                            st.metric("Arrears", f"{CURRENCY_SYMBOL} {b_stats['arrears']:,.0f}")
+                            st.metric("Avg DPD", f"{b_stats['avg_dpd']:.1f}")
+                        with inner_col2:
+                            st.metric("Portfolio Risk Share", f"{b_stats['risk_share']:.1f}%")
+                            st.metric("Accounts", f"{b_stats['accounts']:,}")
+                            st.metric("Main Driver", b_stats['main_driver'])
             else:
                 st.info("No branch data available.")
 
@@ -750,15 +750,15 @@ def main():
     else:
         officer_matrix = get_officer_performance_matrix(df_display)
         if not officer_matrix.empty:
-        display_matrix = officer_matrix.rename(columns={'Avg_DPD': 'Average DPD', 'Ratio': 'Arrears Ratio'})
-        st.dataframe(
-            display_matrix.style.map(
-                lambda x: 'color: red' if 'Attention' in str(x) else ('color: orange' if 'Monitor' in str(x) else 'color: green'),
-                subset=['Performance Status']
-            ),
-            use_container_width=True,
-            hide_index=True
-        )
+            display_matrix = officer_matrix.rename(columns={'Avg_DPD': 'Average DPD', 'Ratio': 'Arrears Ratio'})
+            st.dataframe(
+                display_matrix.style.map(
+                    lambda x: 'color: red' if 'Attention' in str(x) else ('color: orange' if 'Monitor' in str(x) else 'color: green'),
+                    subset=['Performance Status']
+                ),
+                use_container_width=True,
+                hide_index=True
+            )
 
     # 3. BIGGEST PORTFOLIO DETERIORATIONS
     st.markdown("### 📈 Biggest Portfolio Deteriorations")
@@ -786,7 +786,7 @@ def main():
                 if c_branch: cols_show.append(c_branch)
                 if c_off: cols_show.append(c_off)
                 
-            st.dataframe(final_movers[cols_show].head(10), use_container_width=True, hide_index=True)
+                st.dataframe(final_movers[cols_show].head(10), use_container_width=True, hide_index=True)
             else:
                 st.info("No trend data available for movers.")
     
@@ -797,7 +797,7 @@ def main():
     else:
         product_matrix = get_product_risk_matrix(df_display)
         if not product_matrix.empty:
-        st.dataframe(product_matrix.rename(columns={'Avg_DPD': 'Average DPD'}), use_container_width=True, hide_index=True)
+            st.dataframe(product_matrix.rename(columns={'Avg_DPD': 'Average DPD'}), use_container_width=True, hide_index=True)
     
     # Dynamic Branch Insights
     if c_branch and selected_branches and len(selected_branches) == 1:
