@@ -679,14 +679,31 @@ def main():
     # Performance Rankings & Insights
     st.subheader("🎯 Performance Rankings & Insights")
     
+    # --- Defensive Column Resolution ---
+    def resolve_col(df, primary, aliases):
+        for name in [primary] + aliases:
+            found = find_column_case_insensitive(df, name)
+            if found: return found
+        return None
+
+    c_acc = resolve_col(df_display, 'AccountID', ['Account_No', 'MemberNo'])
+    c_cust = resolve_col(df_display, 'Customer_Name', ['Client_Name', 'Name', 'Borrower', 'MemberName'])
+    c_off = resolve_col(df_display, 'Loan_Officer', ['Officer', 'LoanOfficer'])
+    c_days = resolve_col(df_display, 'Days', ['DPD', 'Days_Past_Due'])
+    c_branch = resolve_col(df_display, 'Branch', [])
+    c_arr = resolve_col(df_display, 'Arrears', ['Arrear', 'Overdue'])
+    c_prod = resolve_col(df_display, 'Product', [])
+
     # 1. BRANCH RISK INTELLIGENCE & RECOVERY OPPORTUNITIES
     col_risk1, col_risk2 = st.columns([1, 1])
     
     with col_risk1:
         st.markdown("### 🏢 Branch Risk Intelligence")
-        top_branch_info = get_top_risk_branch(df_display)
-        
-        if top_branch_info:
+        if not c_branch or not c_arr:
+            st.warning("⚠️ Branch analysis skipped: Branch/Arrears data missing.")
+        else:
+            top_branch_info = get_top_risk_branch(df_display)
+            if top_branch_info:
             branch_name, _ = top_branch_info
             b_stats = get_branch_detailed_stats(df_display, branch_name)
             
@@ -701,32 +718,38 @@ def main():
                         st.metric("Portfolio Risk Share", f"{b_stats['risk_share']:.1f}%")
                         st.metric("Accounts", f"{b_stats['accounts']:,}")
                         st.metric("Main Driver", b_stats['main_driver'])
-        else:
-            st.info("No branch data available.")
+            else:
+                st.info("No branch data available.")
 
     with col_risk2:
         st.markdown("### 💰 Recovery Opportunities")
-        # Logical windows for recovery actions
-        early_warn = df_display[(df_display['Days'] >= 1) & (df_display['Days'] <= 30)]
-        critical_warn = df_display[df_display['Days'] > 90]
-        
-        c1, c2 = st.columns(2)
-        with c1:
-            st.markdown("**Early Warning (1-30 Days)**")
-            st.metric("Accounts", len(early_warn))
-            st.metric("Exposure", f"{CURRENCY_SYMBOL} {early_warn['Arrears'].sum():,.0f}")
-            st.warning("Action: SMS campaign + phone follow-up")
+        if not c_days or not c_arr:
+            st.warning("⚠️ Recovery opportunities skipped: Days/Arrears data missing.")
+        else:
+            # Logical windows for recovery actions
+            early_warn = df_display[(df_display[c_days] >= 1) & (df_display[c_days] <= 30)]
+            critical_warn = df_display[df_display[c_days] > 90]
             
-        with c2:
-            st.markdown("**Critical (90+ Days)**")
-            st.metric("Accounts", len(critical_warn))
-            st.metric("Exposure", f"{CURRENCY_SYMBOL} {critical_warn['Arrears'].sum():,.0f}")
-            st.error("Action: Recovery escalation")
+            c1, c2 = st.columns(2)
+            with c1:
+                st.markdown("**Early Warning (1-30 Days)**")
+                st.metric("Accounts", len(early_warn))
+                st.metric("Exposure", f"{CURRENCY_SYMBOL} {early_warn[c_arr].sum():,.0f}")
+                st.warning("Action: SMS campaign + phone follow-up")
+                
+            with c2:
+                st.markdown("**Critical (90+ Days)**")
+                st.metric("Accounts", len(critical_warn))
+                st.metric("Exposure", f"{CURRENCY_SYMBOL} {critical_warn[c_arr].sum():,.0f}")
+                st.error("Action: Recovery escalation")
 
     # 2. OFFICER PERFORMANCE MATRIX
     st.markdown("### 👥 Officer Performance Matrix")
-    officer_matrix = get_officer_performance_matrix(df_display)
-    if not officer_matrix.empty:
+    if not c_off:
+        st.warning("⚠️ Officer Matrix skipped: Loan Officer data missing.")
+    else:
+        officer_matrix = get_officer_performance_matrix(df_display)
+        if not officer_matrix.empty:
         display_matrix = officer_matrix.rename(columns={'Avg_DPD': 'Average DPD', 'Ratio': 'Arrears Ratio'})
         st.dataframe(
             display_matrix.style.map(
@@ -740,27 +763,44 @@ def main():
     # 3. BIGGEST PORTFOLIO DETERIORATIONS
     st.markdown("### 📈 Biggest Portfolio Deteriorations")
     with st.expander("Top 10 Accounts with Significant Arrears Increase (Last 30 Days)"):
-        movers_df = get_top_movers(st.session_state.df, group_by='AccountID', recent_period_days=30, top_n=20)
-        
-        if not movers_df.empty:
-            movers_filtered = movers_df[movers_df['AccountID'].isin(df_display['AccountID'])]
-            meta = df_display[['AccountID', 'Customer_Name', 'Branch', 'Loan_Officer', 'Days']].drop_duplicates('AccountID')
-            final_movers = movers_filtered.merge(meta, on='AccountID')
-            
-            final_movers = final_movers.rename(columns={'previous_period': 'Previous Arrears', 'recent_period': 'Current Arrears', 'change': 'Increase Amount'})
-            cols_show = ['Customer_Name', 'AccountID', 'Previous Arrears', 'Current Arrears', 'Increase Amount', 'Branch', 'Loan_Officer']
-            st.dataframe(final_movers[cols_show].head(10), use_container_width=True, hide_index=True)
+        if not c_acc:
+            st.warning("⚠️ Deterioration Analysis skipped: Account identifier missing.")
         else:
-            st.info("No trend data available for movers.")
+            movers_df = get_top_movers(st.session_state.df, group_by=c_acc, recent_period_days=30, top_n=20)
+            
+            if not movers_df.empty:
+                movers_filtered = movers_df[movers_df[c_acc].isin(df_display[c_acc])]
+                
+                # Build metadata table defensively based on found columns
+                meta_cols = [col for col in [c_acc, c_cust, c_branch, c_off, c_days] if col]
+                meta = df_display[meta_cols].drop_duplicates(c_acc)
+                final_movers = movers_filtered.merge(meta, on=c_acc)
+                
+                final_movers = final_movers.rename(columns={'previous_period': 'Previous Arrears', 'recent_period': 'Current Arrears', 'change': 'Increase Amount'})
+                
+                # Build display columns dynamically
+                cols_show = []
+                if c_cust: cols_show.append(c_cust)
+                cols_show.append(c_acc)
+                cols_show.extend(['Previous Arrears', 'Current Arrears', 'Increase Amount'])
+                if c_branch: cols_show.append(c_branch)
+                if c_off: cols_show.append(c_off)
+                
+            st.dataframe(final_movers[cols_show].head(10), use_container_width=True, hide_index=True)
+            else:
+                st.info("No trend data available for movers.")
     
     # 4. PRODUCT RISK INTELLIGENCE
     st.markdown("### 📦 Product Risk Intelligence")
-    product_matrix = get_product_risk_matrix(df_display)
-    if not product_matrix.empty:
+    if not c_prod:
+        st.warning("⚠️ Product Risk Analysis skipped: Product data missing.")
+    else:
+        product_matrix = get_product_risk_matrix(df_display)
+        if not product_matrix.empty:
         st.dataframe(product_matrix.rename(columns={'Avg_DPD': 'Average DPD'}), use_container_width=True, hide_index=True)
     
     # Dynamic Branch Insights
-    if selected_branches and len(selected_branches) == 1:
+    if c_branch and selected_branches and len(selected_branches) == 1:
         branch = selected_branches[0]
         risk_pct = get_branch_risk_percentage(df, branch)
         main_product = get_main_driver_product_in_branch(df_display, branch)
