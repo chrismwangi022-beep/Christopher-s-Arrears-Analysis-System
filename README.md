@@ -1,6 +1,3 @@
-# Christopher-s-Arrears-Analysis-System
-Christopher's Arrears Analysis System is a high-performance, cloud-integrated financial analytics web application built with Streamlit. This system transforms raw portfolio data into actionable recovery insights providIing portfolio managers with real-time visibility into arrears movement, risk distribution, and loan officer performance.
-=======
 # Spread Capital - Arrears Analysis System
 
 A comprehensive Streamlit-based dashboard for analyzing loan arrears and portfolio risk with high-level Portfolio Intelligence.
@@ -176,4 +173,3 @@ Proprietary - Spread Capital
 ## Support
 
 For issues or questions, contact the development team.
->>>>>>> 3a66b03 (Add gitignore to protect secrets)
