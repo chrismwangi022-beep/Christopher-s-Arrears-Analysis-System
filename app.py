@@ -35,6 +35,7 @@ from src.calculations import (
     get_top_movers,
     get_officer_performance_matrix,
     get_product_risk_matrix,
+    get_branch_detailed_stats,
 )
 from src.constants import (
     COLORS,
@@ -678,46 +679,85 @@ def main():
     # Performance Rankings & Insights
     st.subheader("🎯 Performance Rankings & Insights")
     
-    col_rank1, col_rank2 = st.columns(2)
+    # 1. BRANCH RISK INTELLIGENCE & RECOVERY OPPORTUNITIES
+    col_risk1, col_risk2 = st.columns([1, 1])
     
-    with col_rank1:
-        st.markdown("### Top Risk Branch")
-        top_branch = get_top_risk_branch(df_display)
-        if top_branch:
-            branch_name, branch_amount = top_branch
-            st.metric("Branch", branch_name.title(), f"{CURRENCY_SYMBOL} {branch_amount:,.0f}")
+    with col_risk1:
+        st.markdown("### 🏢 Branch Risk Intelligence")
+        top_branch_info = get_top_risk_branch(df_display)
         
-        st.markdown("### Top Risk Product")
-        top_product = get_top_risk_product(df_display)
-        if top_product:
-            product_name, product_ratio = top_product
-            st.metric("Product", product_name, f"Ratio: {product_ratio:.2%}")
+        if top_branch_info:
+            branch_name, _ = top_branch_info
+            b_stats = get_branch_detailed_stats(df_display, branch_name)
+            
+            if b_stats:
+                with st.container():
+                    inner_col1, inner_col2 = st.columns(2)
+                    with inner_col1:
+                        st.metric("Branch", b_stats['branch'].title())
+                        st.metric("Arrears", f"{CURRENCY_SYMBOL} {b_stats['arrears']:,.0f}")
+                        st.metric("Avg DPD", f"{b_stats['avg_dpd']:.1f}")
+                    with inner_col2:
+                        st.metric("Portfolio Risk Share", f"{b_stats['risk_share']:.1f}%")
+                        st.metric("Accounts", f"{b_stats['accounts']:,}")
+                        st.metric("Main Driver", b_stats['main_driver'])
+        else:
+            st.info("No branch data available.")
+
+    with col_risk2:
+        st.markdown("### 💰 Recovery Opportunities")
+        # Logical windows for recovery actions
+        early_warn = df_display[(df_display['Days'] >= 1) & (df_display['Days'] <= 30)]
+        critical_warn = df_display[df_display['Days'] > 90]
+        
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown("**Early Warning (1-30 Days)**")
+            st.metric("Accounts", len(early_warn))
+            st.metric("Exposure", f"{CURRENCY_SYMBOL} {early_warn['Arrears'].sum():,.0f}")
+            st.warning("Action: SMS campaign + phone follow-up")
+            
+        with c2:
+            st.markdown("**Critical (90+ Days)**")
+            st.metric("Accounts", len(critical_warn))
+            st.metric("Exposure", f"{CURRENCY_SYMBOL} {critical_warn['Arrears'].sum():,.0f}")
+            st.error("Action: Recovery escalation")
+
+    # 2. OFFICER PERFORMANCE MATRIX
+    st.markdown("### 👥 Officer Performance Matrix")
+    officer_matrix = get_officer_performance_matrix(df_display)
+    if not officer_matrix.empty:
+        display_matrix = officer_matrix.rename(columns={'Avg_DPD': 'Average DPD', 'Ratio': 'Arrears Ratio'})
+        st.dataframe(
+            display_matrix.style.applymap(
+                lambda x: 'color: red' if 'Attention' in str(x) else ('color: orange' if 'Monitor' in str(x) else 'color: green'),
+                subset=['Performance Status']
+            ),
+            use_container_width=True,
+            hide_index=True
+        )
+
+    # 3. BIGGEST PORTFOLIO DETERIORATIONS
+    st.markdown("### 📈 Biggest Portfolio Deteriorations")
+    with st.expander("Top 10 Accounts with Significant Arrears Increase (Last 30 Days)"):
+        movers_df = get_top_movers(st.session_state.df, group_by='AccountID', recent_period_days=30, top_n=20)
+        
+        if not movers_df.empty:
+            movers_filtered = movers_df[movers_df['AccountID'].isin(df_display['AccountID'])]
+            meta = df_display[['AccountID', 'Customer_Name', 'Branch', 'Loan_Officer', 'Days']].drop_duplicates('AccountID')
+            final_movers = movers_filtered.merge(meta, on='AccountID')
+            
+            final_movers = final_movers.rename(columns={'previous_period': 'Previous Arrears', 'recent_period': 'Current Arrears', 'change': 'Increase Amount'})
+            cols_show = ['Customer_Name', 'AccountID', 'Previous Arrears', 'Current Arrears', 'Increase Amount', 'Branch', 'Loan_Officer']
+            st.dataframe(final_movers[cols_show].head(10), use_container_width=True, hide_index=True)
+        else:
+            st.info("No trend data available for movers.")
     
-    with col_rank2:
-        st.markdown("### Officer Performance – Praise vs Improve")
-        officer_perf = get_officer_performance(df_display)
-        if not officer_perf.empty:
-            # Best 5 (praise) and worst 5 (needs improvement)
-            best = officer_perf.nsmallest(5, 'Ratio')
-            worst = officer_perf.nlargest(5, 'Ratio')
-            
-            tab_best, tab_worst = st.tabs(["👏 Officers to Praise", "⚠️ Officers Needing Improvement"])
-            
-            with tab_best:
-                st.dataframe(
-                    best[['Officer', 'Arrears', 'Principle', 'Ratio']].rename(columns={
-                        'Ratio': 'Arrears/Portfolio Ratio'
-                    }),
-                    use_container_width=True,
-                )
-            
-            with tab_worst:
-                st.dataframe(
-                    worst[['Officer', 'Arrears', 'Principle', 'Ratio']].rename(columns={
-                        'Ratio': 'Arrears/Portfolio Ratio'
-                    }),
-                    use_container_width=True,
-                )
+    # 4. PRODUCT RISK INTELLIGENCE
+    st.markdown("### 📦 Product Risk Intelligence")
+    product_matrix = get_product_risk_matrix(df_display)
+    if not product_matrix.empty:
+        st.dataframe(product_matrix.rename(columns={'Avg_DPD': 'Average DPD'}), use_container_width=True, hide_index=True)
     
     # Dynamic Branch Insights
     if selected_branches and len(selected_branches) == 1:
