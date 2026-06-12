@@ -729,7 +729,7 @@ def main():
     if not officer_matrix.empty:
         display_matrix = officer_matrix.rename(columns={'Avg_DPD': 'Average DPD', 'Ratio': 'Arrears Ratio'})
         st.dataframe(
-            display_matrix.style.applymap(
+            display_matrix.style.map(
                 lambda x: 'color: red' if 'Attention' in str(x) else ('color: orange' if 'Monitor' in str(x) else 'color: green'),
                 subset=['Performance Status']
             ),
