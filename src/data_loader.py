@@ -149,6 +149,7 @@ def _extract_records_from_df(df: pd.DataFrame, filename: str, report_date: datet
     product_col = detect_column_by_pattern(df, COLUMN_PATTERNS["product"], DEFAULT_COLUMNS["product"])
     account_id_col = detect_column_by_pattern(df, COLUMN_PATTERNS["account_id"], DEFAULT_COLUMNS["account_id"])
     member_name_col = detect_column_by_pattern(df, COLUMN_PATTERNS.get("member_name", []), DEFAULT_COLUMNS.get("member_name"))
+    mobileno_col = detect_column_by_pattern(df, ["mobileno"], None) # Detect "MobileNo" column
 
     # Find first numeric row in arrears column to identify potential data rows
     data_rows = []
@@ -188,6 +189,11 @@ def _extract_records_from_df(df: pd.DataFrame, filename: str, report_date: datet
             'MemberName': member_name_raw,
             'Report_Date': report_date, # Enforce strict report date from filename
         }
+        
+        # NEW: Include MobileNo if detected in the raw data
+        if mobileno_col is not None and mobileno_col < len(row):
+            record['MobileNo'] = str(row.iloc[mobileno_col]).strip()
+        # No else needed, as it will be handled by the cleaning step later if not present
 
         # Extract values with error handling
         def extract_numeric(col_idx, key):
@@ -272,7 +278,20 @@ def load_and_process_file(file_path: str) -> pd.DataFrame:
         df = extract_branch_and_officer(df, filename)
         
         # Delegate processing to the core logic function
-        return _extract_records_from_df(df, filename, file_report_date)
+        processed_df = _extract_records_from_df(df, filename, file_report_date)
+        
+        if not processed_df.empty:
+            # NEW: Detect 'MobileNo', rename to 'Phone_Number', and clean for individual file
+            if 'MobileNo' in processed_df.columns:
+                processed_df.rename(columns={'MobileNo': 'Phone_Number'}, inplace=True)
+            
+            if 'Phone_Number' in processed_df.columns:
+                processed_df['Phone_Number'] = processed_df['Phone_Number'].astype(str)
+                processed_df['Phone_Number'] = processed_df['Phone_Number'].replace(['N/A', 'NA', 'nan', 'None', ''], "No Phone")
+                processed_df['Phone_Number'] = processed_df['Phone_Number'].str.strip()
+                processed_df['Phone_Number'] = processed_df['Phone_Number'].replace('', "No Phone")
+
+        return processed_df
         
     except Exception as e:
         print(f"ERROR loading {filename}: {e}")
@@ -324,6 +343,20 @@ def load_all_data() -> pd.DataFrame:
     # Combine all dataframes
     combined_df = pd.concat(all_dataframes, ignore_index=True)
     
+    # NEW: Detect 'MobileNo', rename to 'Phone_Number', and clean after combining
+    # This acts as a safeguard in case individual file processing missed something
+    if 'MobileNo' in combined_df.columns:
+        combined_df.rename(columns={'MobileNo': 'Phone_Number'}, inplace=True)
+        print("  DEBUG: Renamed 'MobileNo' to 'Phone_Number' in combined data.")
+    
+    if 'Phone_Number' in combined_df.columns:
+        combined_df['Phone_Number'] = combined_df['Phone_Number'].astype(str)
+        combined_df['Phone_Number'] = combined_df['Phone_Number'].replace(['N/A', 'NA', 'nan', 'None', ''], "No Phone")
+        combined_df['Phone_Number'] = combined_df['Phone_Number'].str.strip()
+        combined_df['Phone_Number'] = combined_df['Phone_Number'].replace('', "No Phone")
+        print("  DEBUG: Cleaned 'Phone_Number' column in combined data.")
+
+
     # Clean up Branch and Loan_Officer
     combined_df['Branch'] = combined_df['Branch'].astype(str).str.lower().str.strip()
     combined_df['Loan_Officer'] = combined_df['Loan_Officer'].astype(str).str.lower().str.strip()
@@ -376,6 +409,7 @@ def process_uploaded_file(uploaded_file, branch_name: Optional[str] = None) -> p
         if branch_name:
             df['Branch'] = branch_name.lower().strip()
 
+<<<<<<< HEAD
         # Mandatory: Determine report date from filename
         report_date = extract_date_from_filename(uploaded_file.name)
         if report_date is None:
@@ -384,6 +418,23 @@ def process_uploaded_file(uploaded_file, branch_name: Optional[str] = None) -> p
 
         # Delegate processing to the core logic function
         return _extract_records_from_df(df, uploaded_file.name, report_date)
+=======
+        # Delegate to the core processing function
+        processed_df = _extract_records_from_df(df, uploaded_file.name, datetime.now().date())
+        
+        if not processed_df.empty:
+            # NEW: Detect 'MobileNo', rename to 'Phone_Number', and clean for uploaded file
+            if 'MobileNo' in processed_df.columns:
+                processed_df.rename(columns={'MobileNo': 'Phone_Number'}, inplace=True)
+            
+            if 'Phone_Number' in processed_df.columns:
+                processed_df['Phone_Number'] = processed_df['Phone_Number'].astype(str)
+                processed_df['Phone_Number'] = processed_df['Phone_Number'].replace(['N/A', 'NA', 'nan', 'None', ''], "No Phone")
+                processed_df['Phone_Number'] = processed_df['Phone_Number'].str.strip()
+                processed_df['Phone_Number'] = processed_df['Phone_Number'].replace('', "No Phone")
+
+        return processed_df
+>>>>>>> 10625738c44bac573f4c1023c1e4cddd5ef51ae6
         
     except Exception as e:
         print(f"Error processing uploaded file: {e}")

@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 import sys
 import os
 import io
+import numpy as np
 import git
 
 # Add src to path
@@ -33,6 +34,9 @@ from src.calculations import (
     get_arrears_time_series,
     get_trend_for_entity,
     get_top_movers,
+    get_officer_performance_matrix,
+    get_product_risk_matrix,
+    get_branch_detailed_stats,
 )
 from src.constants import (
     COLORS,
@@ -42,6 +46,56 @@ from src.constants import (
     CHART_CONFIG,
     DATA_FOLDER,
 )
+
+def build_action_engine(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Transforms arrears data into a Daily Collections Action Center.
+    Implements weighted priority scoring, banding, and recommended actions.
+    """
+    if df.empty:
+        return pd.DataFrame()
+        
+    action_df = df.copy()
+    
+    # 1. HANDLE EDGE CASES & NORMALIZATION PREP
+    if 'Customer_Name' not in action_df.columns:
+        action_df['Customer_Name'] = action_df.get('MemberName', 'Unknown')
+    if 'Phone_Number' not in action_df.columns:
+        action_df['Phone_Number'] = "N/A"
+
+    action_df['Days'] = pd.to_numeric(action_df['Days'], errors='coerce').fillna(0)
+    action_df['Arrears'] = pd.to_numeric(action_df['Arrears'], errors='coerce').fillna(0)
+    
+    # 2. CREATE A PRIORITY SCORE (Vectorized)
+    max_days = action_df['Days'].max()
+    max_arrears = action_df['Arrears'].max()
+    
+    norm_days = (action_df['Days'] / max_days * 100) if max_days > 0 else action_df['Days'] * 0
+    norm_arrears = (action_df['Arrears'] / max_arrears * 100) if max_arrears > 0 else action_df['Arrears'] * 0
+    
+    action_df['Priority_Score'] = (norm_days * 0.5) + (norm_arrears * 0.5)
+    
+    # 3. CREATE PRIORITY BAND COLUMN
+    score_bins = [0, 20, 50, 80, 101]
+    score_labels = ["🟢 Low", "🟡 Medium", "🟠 High", "🔴 Critical"]
+    action_df['Priority_Band'] = pd.cut(action_df['Priority_Score'], bins=score_bins, labels=score_labels, right=False)
+    
+    # 4. CREATE ACTION COLUMN
+    action_conditions = [
+        (action_df['Days'] > 90), (action_df['Days'] > 30), (action_df['Days'] > 0), (action_df['Days'] <= 0)
+    ]
+    action_values = ["Recovery / Physical Visit", "Call + SMS", "SMS Reminder", "Monitor"]
+    action_df['Action'] = np.select(action_conditions, action_values, default="Monitor")
+    
+    # 5. CREATE SMS_FLAG COLUMN
+    action_df['SMS_FLAG'] = np.where(action_df['Action'].str.contains("SMS"), "YES", "NO")
+    
+    # 6. ENSURE CLEAN OUTPUT DATAFRAME
+    output_cols = [
+        'Customer_Name', 'Phone_Number', 'AccountID', 'Branch', 'Loan_Officer', 
+        'Product', 'Days', 'Arrears', 'Priority_Score', 'Priority_Band', 'Action', 'SMS_FLAG'
+    ]
+    return action_df[output_cols]
 
 # Page configuration
 st.set_page_config(
@@ -272,6 +326,9 @@ def main():
         df_display = df_categorized[df_categorized['Aging_Bucket'].isin(selected_aging)]
     else:
         df_display = df_categorized
+        
+    # 🚀 Run Daily Action Engine
+    action_center_df = build_action_engine(df_display)
     
     # Display filtered record count
     st.sidebar.markdown("---")
@@ -580,34 +637,19 @@ def main():
 
     # Action-level worklist: exactly which account needs what action
     st.markdown("---")
-    st.subheader("🧾 Action-Level Worklist")
-    worklist_df = df_display.copy() # Use the already categorized display dataframe
-    
-    def map_action(bucket: str) -> str:
-        if bucket == "Early Warning (1-30)":
-            return "Call Back / SMS Reminder"
-        if bucket in ["Moderate (31-60)", "Warning (61-90)"]:
-            return "Physical Visit / Site Visit & Guarantor Engagement"
-        if bucket == "Critical (>90)":
-            return "Escalate Recovery Measures / Legal Follow-up"
-        return "Monitor"
-    
-    worklist_df['Recommended_Action'] = worklist_df['Aging_Bucket'].apply(map_action)
-    
-    # Compact view focused on frontline execution
-    cols_to_show = ['AccountID', 'Branch', 'Loan_Officer', 'Product', 'Days', 'Arrears', 'Aging_Bucket', 'Recommended_Action']
-    cols_to_show = [c for c in cols_to_show if c in worklist_df.columns]
+    st.subheader("📞 Daily Collections Action Center")
     
     # Separate tabs for different action types
-    tab_call, tab_visit, tab_recovery = st.tabs(["Call Backs (1–30 days)", "Physical Visits (31–90 days)", "Recovery Escalations (>90 days)"])
+    tab_sms, tab_call, tab_recovery = st.tabs(["SMS Reminders (1-30 days)", "Call + SMS (31-90 days)", "Recovery / Physical Visit (>90 days)"])
     
     def render_worklist_tab(df_tab, label_prefix: str):
         """Render table + CSV/Excel export buttons for a given worklist slice."""
         if df_tab.empty:
-            st.caption(f"No accounts currently in {label_prefix.lower()}.")
+            st.caption(f"No accounts currently requiring {label_prefix.lower()}.")
             return
-        view = df_tab[cols_to_show].copy()
-        st.dataframe(view, use_container_width=True)
+        # Sort by Priority_Score for maximum impact
+        view = df_tab.sort_values(by='Priority_Score', ascending=False)
+        st.dataframe(view, use_container_width=True, hide_index=True)
 
         # --- REFACTOR: Place download buttons side-by-side ---
         dl_col1, dl_col2 = st.columns(2)
@@ -633,66 +675,145 @@ def main():
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             )
 
-    with tab_call:
-        call_df = worklist_df[worklist_df['Recommended_Action'].str.contains("Call Back")]
-        render_worklist_tab(call_df, "Call Back")
+    with tab_sms:
+        sms_df = action_center_df[action_center_df['Action'] == "SMS Reminder"]
+        render_worklist_tab(sms_df, "SMS Reminder")
     
-    with tab_visit:
-        visit_df = worklist_df[worklist_df['Recommended_Action'].str.contains("Physical Visit")]
-        render_worklist_tab(visit_df, "Physical Visit")
+    with tab_call:
+        call_df = action_center_df[action_center_df['Action'] == "Call + SMS"]
+        render_worklist_tab(call_df, "Call + SMS")
     
     with tab_recovery:
-        recovery_df = worklist_df[worklist_df['Recommended_Action'].str.contains("Recovery Measures")]
-        render_worklist_tab(recovery_df, "Recovery Escalation")
+        recovery_df = action_center_df[action_center_df['Action'] == "Recovery / Physical Visit"]
+        render_worklist_tab(recovery_df, "Recovery / Physical Visit")
     
     st.markdown("---")
     
     # Performance Rankings & Insights
     st.subheader("🎯 Performance Rankings & Insights")
     
-    col_rank1, col_rank2 = st.columns(2)
+    # --- Defensive Column Resolution ---
+    def resolve_col(df, primary, aliases):
+        for name in [primary] + aliases:
+            found = find_column_case_insensitive(df, name)
+            if found: return found
+        return None
+
+    c_acc = resolve_col(df_display, 'AccountID', ['Account_No', 'MemberNo'])
+    c_cust = resolve_col(df_display, 'Customer_Name', ['Client_Name', 'Name', 'Borrower', 'MemberName'])
+    c_off = resolve_col(df_display, 'Loan_Officer', ['Officer', 'LoanOfficer'])
+    c_days = resolve_col(df_display, 'Days', ['DPD', 'Days_Past_Due'])
+    c_branch = resolve_col(df_display, 'Branch', [])
+    c_arr = resolve_col(df_display, 'Arrears', ['Arrear', 'Overdue'])
+    c_prod = resolve_col(df_display, 'Product', [])
+
+    # 1. BRANCH RISK INTELLIGENCE & RECOVERY OPPORTUNITIES
+    col_risk1, col_risk2 = st.columns([1, 1])
     
-    with col_rank1:
-        st.markdown("### Top Risk Branch")
-        top_branch = get_top_risk_branch(df_display)
-        if top_branch:
-            branch_name, branch_amount = top_branch
-            st.metric("Branch", branch_name.title(), f"{CURRENCY_SYMBOL} {branch_amount:,.0f}")
-        
-        st.markdown("### Top Risk Product")
-        top_product = get_top_risk_product(df_display)
-        if top_product:
-            product_name, product_ratio = top_product
-            st.metric("Product", product_name, f"Ratio: {product_ratio:.2%}")
+    with col_risk1:
+        st.markdown("### 🏢 Branch Risk Intelligence")
+        if not c_branch or not c_arr:
+            st.warning("⚠️ Branch analysis skipped: Branch/Arrears data missing.")
+        else:
+            top_branch_info = get_top_risk_branch(df_display)
+            if top_branch_info:
+                branch_name, _ = top_branch_info
+                b_stats = get_branch_detailed_stats(df_display, branch_name)
+                
+                if b_stats:
+                    with st.container():
+                        inner_col1, inner_col2 = st.columns(2)
+                        with inner_col1:
+                            st.metric("Branch", b_stats['branch'].title())
+                            st.metric("Arrears", f"{CURRENCY_SYMBOL} {b_stats['arrears']:,.0f}")
+                            st.metric("Avg DPD", f"{b_stats['avg_dpd']:.1f}")
+                        with inner_col2:
+                            st.metric("Portfolio Risk Share", f"{b_stats['risk_share']:.1f}%")
+                            st.metric("Accounts", f"{b_stats['accounts']:,}")
+                            st.metric("Main Driver", b_stats['main_driver'])
+            else:
+                st.info("No branch data available.")
+
+    with col_risk2:
+        st.markdown("### 💰 Recovery Opportunities")
+        if not c_days or not c_arr:
+            st.warning("⚠️ Recovery opportunities skipped: Days/Arrears data missing.")
+        else:
+            # Logical windows for recovery actions
+            early_warn = df_display[(df_display[c_days] >= 1) & (df_display[c_days] <= 30)]
+            critical_warn = df_display[df_display[c_days] > 90]
+            
+            c1, c2 = st.columns(2)
+            with c1:
+                st.markdown("**Early Warning (1-30 Days)**")
+                st.metric("Accounts", len(early_warn))
+                st.metric("Exposure", f"{CURRENCY_SYMBOL} {early_warn[c_arr].sum():,.0f}")
+                st.warning("Action: SMS campaign + phone follow-up")
+                
+            with c2:
+                st.markdown("**Critical (90+ Days)**")
+                st.metric("Accounts", len(critical_warn))
+                st.metric("Exposure", f"{CURRENCY_SYMBOL} {critical_warn[c_arr].sum():,.0f}")
+                st.error("Action: Recovery escalation")
+
+    # 2. OFFICER PERFORMANCE MATRIX
+    st.markdown("### 👥 Officer Performance Matrix")
+    if not c_off:
+        st.warning("⚠️ Officer Matrix skipped: Loan Officer data missing.")
+    else:
+        officer_matrix = get_officer_performance_matrix(df_display)
+        if not officer_matrix.empty:
+            display_matrix = officer_matrix.rename(columns={'Avg_DPD': 'Average DPD', 'Ratio': 'Arrears Ratio'})
+            st.dataframe(
+                display_matrix.style.map(
+                    lambda x: 'color: red' if 'Attention' in str(x) else ('color: orange' if 'Monitor' in str(x) else 'color: green'),
+                    subset=['Performance Status']
+                ),
+                use_container_width=True,
+                hide_index=True
+            )
+
+    # 3. BIGGEST PORTFOLIO DETERIORATIONS
+    st.markdown("### 📈 Biggest Portfolio Deteriorations")
+    with st.expander("Top 10 Accounts with Significant Arrears Increase (Last 30 Days)"):
+        if not c_acc:
+            st.warning("⚠️ Deterioration Analysis skipped: Account identifier missing.")
+        else:
+            movers_df = get_top_movers(st.session_state.df, group_by=c_acc, recent_period_days=30, top_n=20)
+            
+            if not movers_df.empty:
+                movers_filtered = movers_df[movers_df[c_acc].isin(df_display[c_acc])]
+                
+                # Build metadata table defensively based on found columns
+                meta_cols = [col for col in [c_acc, c_cust, c_branch, c_off, c_days] if col]
+                meta = df_display[meta_cols].drop_duplicates(c_acc)
+                final_movers = movers_filtered.merge(meta, on=c_acc)
+                
+                final_movers = final_movers.rename(columns={'previous_period': 'Previous Arrears', 'recent_period': 'Current Arrears', 'change': 'Increase Amount'})
+                
+                # Build display columns dynamically
+                cols_show = []
+                if c_cust: cols_show.append(c_cust)
+                cols_show.append(c_acc)
+                cols_show.extend(['Previous Arrears', 'Current Arrears', 'Increase Amount'])
+                if c_branch: cols_show.append(c_branch)
+                if c_off: cols_show.append(c_off)
+                
+                st.dataframe(final_movers[cols_show].head(10), use_container_width=True, hide_index=True)
+            else:
+                st.info("No trend data available for movers.")
     
-    with col_rank2:
-        st.markdown("### Officer Performance – Praise vs Improve")
-        officer_perf = get_officer_performance(df_display)
-        if not officer_perf.empty:
-            # Best 5 (praise) and worst 5 (needs improvement)
-            best = officer_perf.nsmallest(5, 'Ratio')
-            worst = officer_perf.nlargest(5, 'Ratio')
-            
-            tab_best, tab_worst = st.tabs(["👏 Officers to Praise", "⚠️ Officers Needing Improvement"])
-            
-            with tab_best:
-                st.dataframe(
-                    best[['Officer', 'Arrears', 'Principle', 'Ratio']].rename(columns={
-                        'Ratio': 'Arrears/Portfolio Ratio'
-                    }),
-                    use_container_width=True,
-                )
-            
-            with tab_worst:
-                st.dataframe(
-                    worst[['Officer', 'Arrears', 'Principle', 'Ratio']].rename(columns={
-                        'Ratio': 'Arrears/Portfolio Ratio'
-                    }),
-                    use_container_width=True,
-                )
+    # 4. PRODUCT RISK INTELLIGENCE
+    st.markdown("### 📦 Product Risk Intelligence")
+    if not c_prod:
+        st.warning("⚠️ Product Risk Analysis skipped: Product data missing.")
+    else:
+        product_matrix = get_product_risk_matrix(df_display)
+        if not product_matrix.empty:
+            st.dataframe(product_matrix.rename(columns={'Avg_DPD': 'Average DPD'}), use_container_width=True, hide_index=True)
     
     # Dynamic Branch Insights
-    if selected_branches and len(selected_branches) == 1:
+    if c_branch and selected_branches and len(selected_branches) == 1:
         branch = selected_branches[0]
         risk_pct = get_branch_risk_percentage(df, branch)
         main_product = get_main_driver_product_in_branch(df_display, branch)
