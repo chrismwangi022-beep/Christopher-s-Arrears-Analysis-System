@@ -19,6 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from src.data_loader import load_all_data
 from src.calculations import (
     calculate_par_percentage,
+    find_column_case_insensitive,
     get_top_risk_branch,
     get_top_risk_product,
     get_star_performers,
@@ -196,10 +197,6 @@ def main():
         st.error("No data loaded. Please check the data folder path.")
         return
     
-<<<<<<< HEAD
-    # Timeline -> Calendar: flexible multiselect filter
-    st.sidebar.subheader("📅 Report Timeline")
-=======
     # Sidebar filters
     st.sidebar.title("🔍 Filters")
     # Developer credit next to Filters title
@@ -209,10 +206,9 @@ def main():
     )
     st.sidebar.markdown("---")
 
-    # Timeline -> Calendar: strict single-date filter using Report_Date
-    st.sidebar.subheader("Report Date")
+    # Report Date Filter
+    st.sidebar.subheader("📅 Report Date")
     df_filtered = df.copy()
->>>>>>> 3258ac82436e9a50182a85b57be838f9bfc52beb
     if 'Report_Date' in df.columns:
         # Normalize column to Python date objects for UI consistency
         df['Report_Date'] = pd.to_datetime(df['Report_Date'], errors='coerce').dt.date
@@ -335,29 +331,8 @@ def main():
                     except Exception as e:
                         errors.append(f"{uploaded_file.name}: {e}")
                 
-<<<<<<< HEAD
-                if saved_count > 0 and new_data_frames:
-                    # 1. Process and Append incrementally to the existing session dataframe
-                    all_new = pd.concat(new_data_frames, ignore_index=True)
-                    
-                    # 2. Update the persistent master dataset (Parquet)
-                    append_to_master_dataset(all_new)
-
-                    # 2. Preserve session dataset by only appending the new delta
-                    # Deduplicate to ensure UI doesn't show double entries
-                    st.session_state.df = pd.concat([st.session_state.df, all_new], ignore_index=True).drop_duplicates(
-                        subset=['Branch', 'AccountID', 'MemberName', 'Report_Date'], 
-                        keep='last'
-                    )
-                    
-                    # 3. Update snapshots using ONLY the newly uploaded delta (not the whole history)
-                    update_historical_snapshots(all_new)
-
-                    # 4. Git Push Logic (Maintained for synchronization)
-=======
                 if saved_count > 0:
                     # --- GIT PUSH LOGIC ---
->>>>>>> 3258ac82436e9a50182a85b57be838f9bfc52beb
                     git_success_message = None
                     git_error_message = None
 

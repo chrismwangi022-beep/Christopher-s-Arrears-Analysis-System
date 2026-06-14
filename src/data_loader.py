@@ -441,5 +441,3 @@ def append_to_master_dataset(new_df: pd.DataFrame):
     else:
         new_df.to_parquet(MASTER_DATASET_PATH, index=False, engine='pyarrow')
         print(f"DEBUG: Master dataset created at {MASTER_DATASET_PATH} with initial records.")
-=======
->>>>>>> 3258ac82436e9a50182a85b57be838f9bfc52beb
