@@ -20,6 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from src.data_loader import load_all_data
 from src.calculations import (
     calculate_par_percentage,
+    find_column_case_insensitive,
     get_top_risk_branch,
     get_top_risk_product,
     get_star_performers,
@@ -259,6 +260,7 @@ def main():
     )
     st.sidebar.markdown("---")
 
+<<<<<<< HEAD
     # Report Date Selector
     st.sidebar.subheader("Report Date")
     if 'Report_Date' in df.columns:
@@ -268,6 +270,32 @@ def main():
         # Strict snapshot equality filter
         df_filtered = df[df_report_dates == selected_date]
     else:
+=======
+    # Report Date Filter
+    st.sidebar.subheader("📅 Report Date")
+    df_filtered = df.copy()
+    if 'Report_Date' in df.columns:
+        # Normalize column to Python date objects for UI consistency
+        df['Report_Date'] = pd.to_datetime(df['Report_Date'], errors='coerce').dt.date
+        all_dates = sorted(df['Report_Date'].dropna().unique(), reverse=True)
+        
+        if all_dates:
+            # Provide date strings for UI selection
+            date_options = [d.strftime('%Y-%m-%d') for d in all_dates]
+            selected_strs = st.sidebar.multiselect("View Reports for:", options=date_options, default=[date_options[0]])
+            
+            if selected_strs:
+                selected_dates = [datetime.strptime(s, '%Y-%m-%d').date() for s in selected_strs]
+                df_filtered = df[df['Report_Date'].isin(selected_dates)]
+            else:
+                # Standard behavior: no filter selected = view all historical data
+                df_filtered = df.copy()
+                st.sidebar.info("Viewing historical view (all dates).")
+        else:
+            df_filtered = df.copy()
+    else:
+        st.sidebar.warning("Report_Date column missing from dataset.")
+>>>>>>> ced00b6e44ead726c763c4abd88ae5f0971b33f5
         df_filtered = df.copy()
     
     # Branch filter with explicit "All" option

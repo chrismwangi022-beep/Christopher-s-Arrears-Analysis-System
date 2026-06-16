@@ -61,14 +61,15 @@ def extract_date_from_filename(filename: str) -> Optional[datetime.date]:
 
     Falls back to None if no parseable date is found.
     """
-    # Common date patterns: YYYY-MM-DD, YYYY.MM.DD, DD-MM-YYYY, DD.MM.YYYY, YYYYMMDD
-    patterns = [r"(\d{4}[-\.]\d{2}[-\.]\d{2})", r"(\d{2}[-\.]\d{2}[-\.]\d{4})", r"(\d{8})"]
+    # Updated patterns: support single digit days/months (e.g. 8-5-2024 or 2024.5.8)
+    patterns = [r"(\d{4}[-\.]\d{1,2}[-\.]\d{1,2})", r"(\d{1,2}[-\.]\d{1,2}[-\.]\d{4})", r"(\d{8})"]
     for p in patterns:
         m = re.search(p, filename)
         if m:
             s = m.group(1)
             # Try a range of common formats including dot-separated dates
-            for fmt in ("%Y-%m-%d", "%Y.%m.%d", "%d-%m-%Y", "%d.%m.%Y", "%Y%m%d", "%d%m%Y"):
+            # strptime handles single digits automatically for %d and %m
+            for fmt in ("%Y-%m-%d", "%Y.%m.%d", "%d-%m-%Y", "%d.%m.%Y", "%Y%m%d", "%d%m%Y", "%m-%d-%Y", "%m.%d.%Y"):
                 try:
                     return datetime.strptime(s, fmt).date()
                 except Exception:
@@ -138,7 +139,7 @@ def extract_branch_and_officer(df: pd.DataFrame, filename: str) -> pd.DataFrame:
     return df
 
 
-def _extract_records_from_df(df: pd.DataFrame, filename: str, report_date: Optional[datetime.date]) -> pd.DataFrame:
+def _extract_records_from_df(df: pd.DataFrame, filename: str, report_date: datetime.date) -> pd.DataFrame:
     """Core logic to process a raw DataFrame and extract valid arrears records."""
     # Detect columns
     arrears_col = detect_column_by_pattern(df, COLUMN_PATTERNS["arrears"], DEFAULT_COLUMNS["arrears"])
@@ -186,7 +187,7 @@ def _extract_records_from_df(df: pd.DataFrame, filename: str, report_date: Optio
             'Branch': str(row['Branch']) if pd.notna(row['Branch']) else extract_branch_from_filename(filename),
             'Loan_Officer': str(row['Loan_Officer']) if pd.notna(row['Loan_Officer']) else None,
             'MemberName': member_name_raw,
-            'Report_Date': report_date,
+            'Report_Date': report_date, # Enforce strict report date from filename
         }
         
         # NEW: Include MobileNo if detected in the raw data
@@ -226,6 +227,9 @@ def _extract_records_from_df(df: pd.DataFrame, filename: str, report_date: Optio
 
     result_df = pd.DataFrame(result_data)
 
+    # Ensure Report_Date is consistently typed as a Python date object
+    result_df['Report_Date'] = pd.to_datetime(result_df['Report_Date'], errors='coerce').dt.date
+
     # Fill missing Principle/TotalBalance with fallbacks
     if 'Principle' in result_df.columns:
         result_df['Principle'] = pd.to_numeric(result_df['Principle'], errors='coerce').fillna(result_df['Arrears'])
@@ -250,15 +254,12 @@ def _extract_records_from_df(df: pd.DataFrame, filename: str, report_date: Optio
 def load_and_process_file(file_path: str) -> pd.DataFrame:
     """Load a single CSV or Excel file and process it."""
     filename = os.path.basename(file_path)
-    # Attempt to determine report date from filename, otherwise fallback to file modified time
+    
+    # Mandatory: Determine report date from filename
     file_report_date = extract_date_from_filename(filename)
     if file_report_date is None:
-        try:
-            file_mtime = os.path.getmtime(file_path)
-            file_report_date = datetime.fromtimestamp(file_mtime).date()
-        except Exception:
-            file_report_date = None
-    
+        print(f"ERROR: Filename '{filename}' does not contain a valid date. Skipping file.")
+        return pd.DataFrame()
     try:
         # Load file
         if file_path.lower().endswith('.csv'):
@@ -408,6 +409,16 @@ def process_uploaded_file(uploaded_file, branch_name: Optional[str] = None) -> p
         if branch_name:
             df['Branch'] = branch_name.lower().strip()
 
+<<<<<<< HEAD
+        # Mandatory: Determine report date from filename
+        report_date = extract_date_from_filename(uploaded_file.name)
+        if report_date is None:
+            print(f"ERROR: Uploaded file '{uploaded_file.name}' rejected: No date found in filename.")
+            return pd.DataFrame()
+
+        # Delegate processing to the core logic function
+        return _extract_records_from_df(df, uploaded_file.name, report_date)
+=======
         # Delegate to the core processing function
         processed_df = _extract_records_from_df(df, uploaded_file.name, datetime.now().date())
         
@@ -423,7 +434,61 @@ def process_uploaded_file(uploaded_file, branch_name: Optional[str] = None) -> p
                 processed_df['Phone_Number'] = processed_df['Phone_Number'].replace('', "No Phone")
 
         return processed_df
+>>>>>>> 10625738c44bac573f4c1023c1e4cddd5ef51ae6
         
     except Exception as e:
         print(f"Error processing uploaded file: {e}")
         return pd.DataFrame()
+<<<<<<< HEAD
+
+def load_master_dataset() -> pd.DataFrame:
+    """
+    Loads the master dataset from Parquet format.
+    If Parquet doesn't exist, builds it from historical CSV/XLSX files using load_all_data().
+    """
+    if not os.path.exists(MASTER_DATASET_PATH):
+        print(f"DEBUG: Master Parquet not found at {MASTER_DATASET_PATH}. Initializing from historical files...")
+        df = load_all_data()
+        if not df.empty:
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(MASTER_DATASET_PATH), exist_ok=True)
+            df.to_parquet(MASTER_DATASET_PATH, index=False, engine='pyarrow')
+            print(f"DEBUG: Master dataset initialized and saved to {MASTER_DATASET_PATH}")
+        return df
+    
+    print(f"DEBUG: Loading master dataset from {MASTER_DATASET_PATH}")
+    return pd.read_parquet(MASTER_DATASET_PATH, engine='pyarrow')
+
+def append_to_master_dataset(new_df: pd.DataFrame):
+    """
+    Appends new records to the master parquet file to keep the persistent dataset updated.
+    """
+    if new_df.empty:
+        return
+
+    # Ensure directory exists
+    os.makedirs(os.path.dirname(MASTER_DATASET_PATH), exist_ok=True)
+
+    if os.path.exists(MASTER_DATASET_PATH):
+        try:
+            existing_df = pd.read_parquet(MASTER_DATASET_PATH, engine='pyarrow')
+            
+            # Normalize dates in both sets to prevent merge mismatches
+            for frame in [existing_df, new_df]:
+                if 'Report_Date' in frame.columns:
+                    frame['Report_Date'] = pd.to_datetime(frame['Report_Date'], errors='coerce').dt.date
+            
+            # Remove rows with invalid dates before concat
+            new_df = new_df.dropna(subset=['Report_Date']) if 'Report_Date' in new_df.columns else new_df
+
+            updated_df = pd.concat([existing_df, new_df], ignore_index=True).drop_duplicates(
+                subset=['Branch', 'AccountID', 'MemberName', 'Report_Date'], 
+                keep='last'
+            )
+            updated_df.to_parquet(MASTER_DATASET_PATH, index=False, engine='pyarrow')
+            print(f"DEBUG: Successfully appended {len(new_df)} records to {MASTER_DATASET_PATH}")
+        except Exception as e:
+            print(f"ERROR appending to master dataset: {e}")
+    else:
+        new_df.to_parquet(MASTER_DATASET_PATH, index=False, engine='pyarrow')
+        print(f"DEBUG: Master dataset created at {MASTER_DATASET_PATH} with initial records.")
