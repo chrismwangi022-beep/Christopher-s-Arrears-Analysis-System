@@ -14,8 +14,10 @@ import io
 import numpy as np
 import git
 
-# Add src to path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# Ensure the project root is in Python's path for Streamlit Cloud compatibility
+project_root = os.path.dirname(os.path.realpath(__file__))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
 from src.data_loader import load_all_data
 from src.calculations import (
