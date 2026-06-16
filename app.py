@@ -260,15 +260,15 @@ def main():
     )
     st.sidebar.markdown("---")
 
-    # Report Date
+    # Report Date Selector
     st.sidebar.subheader("Report Date")
     if 'Report_Date' in df.columns:
-        # Internal date handling without string conversion
-        df_Report_Date = pd.to_datetime(df['Report_Date'], errors='coerce').dt.date
-        # Default to latest available date
-        selected_date = st.sidebar.date_input("Select Report Date", value=df_Report_Date.max())
-        # Strict equality filter for snapshot report
-        df_filtered = df[df_Report_Date == selected_date]
+        # Internal date handling as date objects for strict comparison
+        df_dates = pd.to_datetime(df['Report_Date'], errors='coerce').dt.date
+        # Default to the latest available snapshot
+        selected_date = st.sidebar.date_input("Select Report Date", value=df_dates.max())
+        # Strict equality filter for snapshot-only reporting
+        df_filtered = df[df_dates == selected_date]
     else:
         df_filtered = df.copy()
     
