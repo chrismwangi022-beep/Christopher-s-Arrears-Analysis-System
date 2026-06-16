@@ -6,7 +6,14 @@ import pandas as pd
 import numpy as np
 from typing import Dict, List, Tuple, Optional
 
-from .constants import AGING_BUCKETS
+from .constants import AGING_BUCKETS, CURRENCY_SYMBOL
+
+
+def format_currency(value: float) -> str:
+    """Format numeric value as currency (accounting format: KES 0,000.00)."""
+    if pd.isna(value) or value is None:
+        return f"{CURRENCY_SYMBOL} 0.00"
+    return f"{CURRENCY_SYMBOL} {value:,.2f}"
 
 
 def find_column_case_insensitive(df: pd.DataFrame, column_name: str) -> Optional[str]:

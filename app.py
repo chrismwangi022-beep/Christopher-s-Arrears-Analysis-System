@@ -39,6 +39,7 @@ from src.calculations import (
     get_officer_performance_matrix,
     get_product_risk_matrix,
     get_branch_detailed_stats,
+    format_currency,
 )
 from src.constants import (
     COLORS,
@@ -454,7 +455,7 @@ def main():
     with col1:
         st.markdown(f"""
         <div class="kpi-card">
-            <div class="kpi-value">{CURRENCY_SYMBOL} {total_arrears:,.0f}</div>
+            <div class="kpi-value">{format_currency(total_arrears)}</div>
             <div class="kpi-label">Total Arrears</div>
         </div>
         """, unsafe_allow_html=True)
@@ -490,7 +491,7 @@ def main():
     with col5:
         st.markdown(f"""
         <div class="kpi-card">
-            <div class="kpi-value">{CURRENCY_SYMBOL} {total_portfolio:,.0f}</div>
+            <div class="kpi-value">{format_currency(total_portfolio)}</div>
             <div class="kpi-label">Total Principal</div>
         </div>
         """, unsafe_allow_html=True)
@@ -513,13 +514,13 @@ def main():
                     x=branch_totals.index,
                     y=branch_totals.values,
                     marker_color=COLORS['accent_cyan'],
-                    text=[f"{CURRENCY_SYMBOL} {val:,.0f}" for val in branch_totals.values],
+                    text=[format_currency(val) for val in branch_totals.values],
                     textposition='outside',
                 )
             ])
             grand_total = branch_totals.sum()
             fig_branch.update_layout(
-                title=f"Arrears by Branch<br><sub>Grand Total Arrears: {CURRENCY_SYMBOL} {grand_total:,.0f}</sub>",
+                title=f"Arrears by Branch<br><sub>Grand Total Arrears: {format_currency(grand_total)}</sub>",
                 xaxis_title="Branch",
                 yaxis_title="Arrears Amount",
                 height=400,
@@ -541,7 +542,7 @@ def main():
             fig_product.update_traces(
                 textposition="inside",
                 textinfo="percent+label+value",
-                hovertemplate="%{label}<br>Arrears: " + CURRENCY_SYMBOL + " %{value:,.0f}<extra></extra>",
+                hovertemplate="%{label}<br>Arrears: " + CURRENCY_SYMBOL + " %{value:,.2f}<extra></extra>",
             )
             fig_product.update_layout(dragmode='pan')
             st.plotly_chart(fig_product, use_container_width=True, config={'scrollZoom': False})
@@ -568,13 +569,13 @@ def main():
                 x=aging_totals.index,
                 y=aging_totals.values,
                 marker_color=colors,
-                text=[f"{CURRENCY_SYMBOL} {val:,.0f}" for val in aging_totals.values],
+                    text=[format_currency(val) for val in aging_totals.values],
                 textposition='outside',
             )
         ])
         grand_total = aging_totals.sum()
         fig_aging.update_layout(
-            title=f"Arrears by Aging Buckets<br><sub>Grand Total Arrears: {CURRENCY_SYMBOL} {grand_total:,.0f}</sub>",
+                title=f"Arrears by Aging Buckets<br><sub>Grand Total Arrears: {format_currency(grand_total)}</sub>",
             xaxis_title="Aging Bucket",
             yaxis_title="Arrears Amount",
             height=400,
@@ -611,16 +612,16 @@ def main():
         }
         emoji = emoji_map.get(priority, "📋")
         
-        with st.expander(f"{emoji} {priority} Priority ({aging_bucket}) - {count} Accounts, {CURRENCY_SYMBOL} {total_arrears:,.0f}"):
+        with st.expander(f"{emoji} {priority} Priority ({aging_bucket}) - {count} Accounts, {format_currency(total_arrears)}"):
             st.markdown(f"**Recommended Action:** {action}")
             st.markdown(f"**Total Accounts:** {count}")
-            st.markdown(f"**Total Arrears:** {CURRENCY_SYMBOL} {total_arrears:,.0f}")
+            st.markdown(f"**Total Arrears:** {format_currency(total_arrears)}")
             
             if not top_accounts.empty:
                 st.markdown("**Top 5 Accounts by Arrears:**")
                 display_df = top_accounts.copy()
-                display_df['Arrears'] = display_df['Arrears'].apply(lambda x: f"{CURRENCY_SYMBOL} {x:,.2f}")
-                display_df['Principle'] = display_df['Principle'].apply(lambda x: f"{CURRENCY_SYMBOL} {x:,.2f}" if pd.notna(x) else "N/A")
+                display_df['Arrears'] = display_df['Arrears'].apply(format_currency)
+                display_df['Principle'] = display_df['Principle'].apply(lambda x: format_currency(x) if pd.notna(x) else "N/A")
                 st.dataframe(display_df, use_container_width=True, hide_index=True)
 
     # Action-level worklist: exactly which account needs what action
@@ -637,7 +638,11 @@ def main():
             return
         # Sort by Priority_Score for maximum impact
         view = df_tab.sort_values(by='Priority_Score', ascending=False)
-        st.dataframe(view, use_container_width=True, hide_index=True)
+        
+        # Create display copy with formatted currency
+        display_view = view.copy()
+        display_view['Arrears'] = display_view['Arrears'].apply(format_currency)
+        st.dataframe(display_view, use_container_width=True, hide_index=True)
 
         # --- REFACTOR: Place download buttons side-by-side ---
         dl_col1, dl_col2 = st.columns(2)
@@ -713,7 +718,7 @@ def main():
                         inner_col1, inner_col2 = st.columns(2)
                         with inner_col1:
                             st.metric("Branch", b_stats['branch'].title())
-                            st.metric("Arrears", f"{CURRENCY_SYMBOL} {b_stats['arrears']:,.0f}")
+                            st.metric("Arrears", format_currency(b_stats['arrears']))
                             st.metric("Avg DPD", f"{b_stats['avg_dpd']:.1f}")
                         with inner_col2:
                             st.metric("Portfolio Risk Share", f"{b_stats['risk_share']:.1f}%")
@@ -735,13 +740,13 @@ def main():
             with c1:
                 st.markdown("**Early Warning (1-30 Days)**")
                 st.metric("Accounts", len(early_warn))
-                st.metric("Exposure", f"{CURRENCY_SYMBOL} {early_warn[c_arr].sum():,.0f}")
+                st.metric("Exposure", format_currency(early_warn[c_arr].sum()))
                 st.warning("Action: SMS campaign + phone follow-up")
                 
             with c2:
                 st.markdown("**Critical (90+ Days)**")
                 st.metric("Accounts", len(critical_warn))
-                st.metric("Exposure", f"{CURRENCY_SYMBOL} {critical_warn[c_arr].sum():,.0f}")
+                st.metric("Exposure", format_currency(critical_warn[c_arr].sum()))
                 st.error("Action: Recovery escalation")
 
     # 2. OFFICER PERFORMANCE MATRIX
@@ -751,7 +756,9 @@ def main():
     else:
         officer_matrix = get_officer_performance_matrix(df_display)
         if not officer_matrix.empty:
-            display_matrix = officer_matrix.rename(columns={'Avg_DPD': 'Average DPD', 'Ratio': 'Arrears Ratio'})
+            display_matrix = officer_matrix.copy()
+            display_matrix['Arrears'] = display_matrix['Arrears'].apply(format_currency)
+            display_matrix = display_matrix.rename(columns={'Avg_DPD': 'Average DPD', 'Ratio': 'Arrears Ratio'})
             st.dataframe(
                 display_matrix.style.map(
                     lambda x: 'color: red' if 'Attention' in str(x) else ('color: orange' if 'Monitor' in str(x) else 'color: green'),
@@ -777,17 +784,14 @@ def main():
                 meta = df_display[meta_cols].drop_duplicates(c_acc)
                 final_movers = movers_filtered.merge(meta, on=c_acc)
                 
-                final_movers = final_movers.rename(columns={'previous_period': 'Previous Arrears', 'recent_period': 'Current Arrears', 'change': 'Increase Amount'})
+                # Build display copy
+                display_movers = final_movers.copy()
+                display_movers['Previous Arrears'] = display_movers['previous_period'].apply(format_currency)
+                display_movers['Current Arrears'] = display_movers['recent_period'].apply(format_currency)
+                display_movers['Increase Amount'] = display_movers['change'].apply(format_currency)
                 
-                # Build display columns dynamically
-                cols_show = []
-                if c_cust: cols_show.append(c_cust)
-                cols_show.append(c_acc)
-                cols_show.extend(['Previous Arrears', 'Current Arrears', 'Increase Amount'])
-                if c_branch: cols_show.append(c_branch)
-                if c_off: cols_show.append(c_off)
-                
-                st.dataframe(final_movers[cols_show].head(10), use_container_width=True, hide_index=True)
+                cols_show = [c for c in [c_cust, c_acc, 'Previous Arrears', 'Current Arrears', 'Increase Amount', c_branch, c_off] if c]
+                st.dataframe(display_movers[cols_show].head(10), use_container_width=True, hide_index=True)
             else:
                 st.info("No trend data available for movers.")
     
@@ -798,7 +802,9 @@ def main():
     else:
         product_matrix = get_product_risk_matrix(df_display)
         if not product_matrix.empty:
-            st.dataframe(product_matrix.rename(columns={'Avg_DPD': 'Average DPD'}), use_container_width=True, hide_index=True)
+            display_prod = product_matrix.copy()
+            display_prod['Arrears'] = display_prod['Arrears'].apply(format_currency)
+            st.dataframe(display_prod.rename(columns={'Avg_DPD': 'Average DPD'}), use_container_width=True, hide_index=True)
     
     # Dynamic Branch Insights
     if c_branch and selected_branches and len(selected_branches) == 1:
@@ -816,7 +822,11 @@ def main():
     st.subheader("📈 Portfolio Distribution by Aging Buckets")
     portfolio_dist = get_portfolio_distribution_by_aging(df_display)
     if not portfolio_dist.empty:
-        st.dataframe(portfolio_dist, use_container_width=True)
+        display_dist = portfolio_dist.copy()
+        for col in ['Total_Arrears', 'Total_Principle', 'Total_Balance']:
+            if col in display_dist.columns:
+                display_dist[col] = display_dist[col].apply(format_currency)
+        st.dataframe(display_dist, use_container_width=True)
         
         # Visual representation
         fig_pie = px.pie(
@@ -881,7 +891,7 @@ def main():
                     markers=True,
                     color_discrete_sequence=palette,
                 )
-                fig_daily.update_traces(hovertemplate=f"%{{x}}<br>Arrears: {CURRENCY_SYMBOL} %{{y:,.0f}}<extra></extra>")
+                fig_daily.update_traces(hovertemplate=f"%{{x}}<br>Arrears: {CURRENCY_SYMBOL} %{{y:,.2f}}<extra></extra>")
                 fig_daily.update_layout(height=450, template='plotly_dark', title=f'Arrears Movement Over Time by {group_choice}', dragmode='pan')
                 st.plotly_chart(fig_daily, use_container_width=True, config={'scrollZoom': False})
             except Exception as e:
