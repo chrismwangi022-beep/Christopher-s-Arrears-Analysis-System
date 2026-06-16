@@ -409,18 +409,14 @@ def process_uploaded_file(uploaded_file, branch_name: Optional[str] = None) -> p
         if branch_name:
             df['Branch'] = branch_name.lower().strip()
 
-<<<<<<< HEAD
         # Mandatory: Determine report date from filename
         report_date = extract_date_from_filename(uploaded_file.name)
         if report_date is None:
             print(f"ERROR: Uploaded file '{uploaded_file.name}' rejected: No date found in filename.")
             return pd.DataFrame()
 
-        # Delegate processing to the core logic function
-        return _extract_records_from_df(df, uploaded_file.name, report_date)
-=======
         # Delegate to the core processing function
-        processed_df = _extract_records_from_df(df, uploaded_file.name, datetime.now().date())
+        processed_df = _extract_records_from_df(df, uploaded_file.name, report_date)
         
         if not processed_df.empty:
             # NEW: Detect 'MobileNo', rename to 'Phone_Number', and clean for uploaded file
@@ -434,12 +430,10 @@ def process_uploaded_file(uploaded_file, branch_name: Optional[str] = None) -> p
                 processed_df['Phone_Number'] = processed_df['Phone_Number'].replace('', "No Phone")
 
         return processed_df
->>>>>>> 10625738c44bac573f4c1023c1e4cddd5ef51ae6
         
     except Exception as e:
         print(f"Error processing uploaded file: {e}")
         return pd.DataFrame()
-<<<<<<< HEAD
 
 def load_master_dataset() -> pd.DataFrame:
     """
